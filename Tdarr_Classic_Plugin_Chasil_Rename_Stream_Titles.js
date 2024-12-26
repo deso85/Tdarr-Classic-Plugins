@@ -6,7 +6,7 @@ const details = () => {
 		Name: "[Chasil] Renames audio and subtitle stream titles",
 		Operation: "Transcode",
 		Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-		Version: "1.1",
+		Version: "1.2",
 		Link: "",
 		Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
 		Inputs: [
@@ -51,7 +51,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	var response = {
 		processFile: false,
 		preset: "",
-		container: ".mp4",
+		container: `.${file.container}`,
 		handBrakeMode: false,
 		FFmpegMode: false,
 		reQueueAfter: false,

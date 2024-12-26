@@ -39,6 +39,18 @@ The renaming currently happens in German only, meaning that stream titles are ou
 
 ![Example before and after renaming](./img/rename_stream_titles_example.png)
 
+## Tdarr_Classic_Plugin_Chasil_Sort_Streams
+This plugin sorts streams in a media file by type (video, audio, subtitle, chapter) and a secondary criteria. The plugin helps to ensure a consistent and logical stream order, improving accessibility and compatibility.
+
+### Sorting Details
+- **Video Streams**: Sorted by language.
+- **Audio Streams**: Sorted by title.
+- **Subtitle Streams**: Sorted by title.
+- **Chapter Streams**: Kept intact but appended in the correct order after the other streams.
+
+### Usage:
+This plugin ensures that streams are ordered logically. It can be used to fix inconsistencies in media files where stream order is jumbled or unclear.
+
 ## Installation Guide
 
 To install and use any of these Tdarr plugins, follow these steps:
