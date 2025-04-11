@@ -6,7 +6,7 @@ const details = () => {
 		Name: "[Chasil] Renames audio and subtitle stream titles",
 		Operation: "Transcode",
 		Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-		Version: "2.0",
+		Version: "3.0",
 		Link: "",
 		Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
 		Inputs: [
@@ -35,6 +35,32 @@ const details = () => {
 					],
 				},
 				tooltip: 'Choose if you want to rename subtitle streams.\\n(default: true)',
+			},
+			{
+				name: "use_audio_channels",
+				type: 'boolean',
+				defaultValue: true,
+				inputUI: {
+					type: 'dropdown',
+					options: [
+						'false',
+						'true',
+					],
+				},
+				tooltip: 'Choose if you want to add channel layout information to audio stream names.\\n(default: true)',
+			},
+			{
+				name: "use_audio_bitrate",
+				type: 'boolean',
+				defaultValue: true,
+				inputUI: {
+					type: 'dropdown',
+					options: [
+						'false',
+						'true',
+					],
+				},
+				tooltip: 'Choose if you want to add bitrate information to audio stream names.\\n(default: true)',
 			},
             {
                 name: "rename_language",
@@ -141,7 +167,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	const lib = require('../methods/lib')();
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
 	inputs = lib.loadDefaultValues(inputs, details);
-	
+
 	//Must return this object
 	var response = {
 		processFile: false,
@@ -175,10 +201,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	let subtitleIndex = 0;
 	let ffmpegCommandInsert = "";
 	let convert = false;
-	
+
 	//get audio tracks for additional information because not every audio stream has all information inside the stream[] e.g. DTS-ES encoded streams
 	const existingAudioTracks = file.mediaInfo.track.filter(track => track['@type'].toLowerCase() === "audio");
-	
+
 	// Go through each stream in the file.
 	for (let i = 0; i < file.ffProbeData.streams.length; i += 1) {
 		const stream = file.ffProbeData.streams[i];
@@ -186,7 +212,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 		if (stream.tags && stream.tags.language) {
 		    titleLang = languageMap[stream.tags.language]?.[selectedLanguage] || "???";
 		}
-		
+
 		// ==================== CODEC ====================
 		if (stream.codec_name) {
 			// AC3
@@ -200,7 +226,9 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			// DTS
 			if (stream.codec_name === "dts") {
 				titleCodec = "DTS";
-				if (existingAudioTracks[audioIndex] && existingAudioTracks[audioIndex].Format_Commercial_IfAny) {
+				if (stream.profile) {
+                    titleCodec = stream.profile;
+                } else if (existingAudioTracks[audioIndex] && existingAudioTracks[audioIndex].Format_Commercial_IfAny) {
 					titleCodec = existingAudioTracks[audioIndex].Format_Commercial_IfAny;
 				}
 			}
@@ -217,7 +245,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 				titleCodec = "TrueHD";
 			}
 			// TrueHD Atmos
-			
+
 			// Advanced SubStation Alpha
 			if (stream.codec_name === "ass") {
 				titleCodec = "ASS";
@@ -238,8 +266,45 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			if (stream.codec_name === "dvd_subtitle") {
 				titleCodec = "VobSub";
 			}
+
+            // add channels and bitrade for audio streams
+            if (existingAudioTracks[audioIndex] && stream.codec_type.toLowerCase() === 'audio') {
+                if(inputs.use_audio_channels) {
+                    const channels = stream.channels || existingAudioTracks[audioIndex]?.Channels || "??";
+                    const channelLayout = stream.channel_layout || existingAudioTracks[audioIndex]?.ChannelLayout || "";
+                    const formattedChannels = (channelLayout || `${channels}`).replace(/\(.*\)/g, "").trim(); // cuts additions like "(side)"
+
+                    titleCodec += ` ${formattedChannels.toLowerCase() === "stereo" ? "2.0" : formattedChannels}`;
+                }
+
+                if(inputs.use_audio_bitrate) {
+                    // print bitrate if it is not a lossless codec
+                    const compressionMode = existingAudioTracks[audioIndex]?.Compression_Mode || stream.tags?.Compression_Mode || "";
+
+                    if (compressionMode.toLowerCase() !== "lossless" &&
+                        titleCodec &&
+                        !(titleCodec.includes("DTS-HD MA") ||
+                        titleCodec.includes("TrueHD") ||
+                        titleCodec.includes("FLAC") ||
+                        titleCodec.includes("PCM"))) {
+
+                        // check if bitrate exists
+                        const bitrate = stream.bit_rate || existingAudioTracks[audioIndex]?.BitRate;
+
+                        if (bitrate) {
+                            titleCodec += ` (${Math.round(bitrate / 1000)} kbps)`;
+                        } else if (stream.tags?.quality_value || existingAudioTracks[audioIndex]?.Quality_Value) {
+                            // Fallback auf Quality Value
+                            const qualityValue = stream.tags?.quality_value || existingAudioTracks[audioIndex]?.Quality_Value || "unknown QV";
+                            titleCodec += ` (Quality: ${qualityValue})`;
+                        } else {
+                            titleCodec += " (?? kbps)";
+                        }
+                    }
+                }
+            }
 		}
-		
+
 		// ==================== DISPOSITION ====================
 		if (stream.disposition) {
 			const additionLanguage = additionMap[selectedLanguage] || additionMap.english;  // Fallback to english
@@ -257,7 +322,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
                 titleAddition = additionLanguage.forced;
             }
 		}
-		
+
 		// ==================== Check current title ====================
 		correctTitle = titleLang + (titleAddition ? " (" + titleAddition + ")" : "") + titleSpacer + titleCodec;
 
@@ -275,17 +340,17 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			}
 			subtitleIndex += 1;
 		}
-		
+
 		// reset to make sure to find undefined streams which have to be added to the plugin
 		titleLang = "???";
 		titleAddition = "";
 		titleCodec = "???";
 		correctTitle = "???"
 	}
-	
-	
+
+
 	const ffmpegCommand = `, ${ffmpegCommandInsert} -c copy -map 0 -max_muxing_queue_size 9999`;
-	
+
 	if(convert) {
 		response.processFile = true;
 		response.preset = ffmpegCommand;
