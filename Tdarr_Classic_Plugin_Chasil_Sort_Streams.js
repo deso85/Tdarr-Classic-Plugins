@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Sort Streams by Type, Title and Language",
         Operation: "Transcode",
         Description: "Sorts streams by type (video, audio, subtitle, chapter) and title. Video streams by language.",
-        Version: "1.0",
+        Version: "1.1",
         Link: "",
         Tags: "pre-processing,sorting,ffmpeg",
         Inputs: [],
@@ -59,6 +59,8 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
 	const getStreamLanguage = (stream) => (stream.tags && stream.tags.language) ? stream.tags.language.toLowerCase() : "unknown";
 	const getStreamTitle = (stream) => (stream.tags && stream.tags.title) ? stream.tags.title.toLowerCase() : "";
+
+	const normalizeTitle = (title) => title.replace(/[()]/g, "").toLowerCase();
 		
     // Sort video streams by language
 	sortedStreams.video.sort((a, b) => {
@@ -80,7 +82,9 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
     // Sort subtitles by language and type
 	sortedStreams.subtitle.sort((a, b) => {
-	    const comparison = getStreamTitle(a.stream).localeCompare(getStreamTitle(b.stream));
+	    const comparison = normalizeTitle(getStreamTitle(a.stream))
+            .localeCompare(normalizeTitle(getStreamTitle(b.stream)));
+	    //const comparison = getStreamTitle(a.stream).localeCompare(getStreamTitle(b.stream));
 	    if (comparison < 0) {
 	        convert = true;
 	    }
@@ -98,7 +102,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	response.infoLog += `ffmpeg command: `+ffmpegCommand+`\n`;
 	
     // Set response for Tdarr
-	if(convert){
+	if(convert) {
 	    response.processFile = true;
 	    response.preset = ffmpegCommand;
 	    response.container = "." + file.container;

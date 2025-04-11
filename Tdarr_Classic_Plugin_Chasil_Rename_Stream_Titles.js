@@ -6,7 +6,7 @@ const details = () => {
 		Name: "[Chasil] Renames audio and subtitle stream titles",
 		Operation: "Transcode",
 		Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-		Version: "1.2",
+		Version: "2.0",
 		Link: "",
 		Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
 		Inputs: [
@@ -35,9 +35,104 @@ const details = () => {
 					],
 				},
 				tooltip: 'Choose if you want to rename subtitle streams.\\n(default: true)',
-			}
+			},
+            {
+                name: "rename_language",
+                type: 'string',
+                defaultValue: 'english',
+                inputUI: {
+                    type: 'dropdown',
+                    options: ['english', 'german'],
+                },
+                tooltip: 'Choose the language for renaming streams.\\n(default: english)',
+             }
 		],
 	};
+};
+
+const languageMap = {
+    //Croatian
+    hr: { english: "Croatian", german: "Kroatisch" },
+    hrv: { english: "Croatian", german: "Kroatisch" },
+    //Czech
+    cs: { english: "Czech", german: "Tschechisch" },
+    cze: { english: "Czech", german: "Tschechisch" },
+    //Danish
+    da: { english: "Danish", german: "Dänisch" },
+    dan: { english: "Danish", german: "Dänisch" },
+    //Dutch
+    nl: { english: "Dutch", german: "Niederländisch" },
+    dut: { english: "Dutch", german: "Niederländisch" },
+    //English
+    en: { english: "English", german: "Englisch" },
+    eng: { english: "English", german: "Englisch" },
+    //Finnish
+    fi: { english: "Finnish", german: "Finnisch" },
+    fin: { english: "Finnish", german: "Finnisch" },
+    //French
+    fr: { english: "French", german: "Französisch" },
+    fre: { english: "French", german: "Französisch" },
+    //German
+    de: { english: "German", german: "Deutsch" },
+    ger: { english: "German", german: "Deutsch" },
+    deu: { english: "German", german: "Deutsch" },
+    //Greek
+    el: { english: "Greek", german: "Griechisch" },
+    gre: { english: "Greek", german: "Griechisch" },
+    //Hungarian
+    hu: { english: "Hungarian", german: "Ungarisch" },
+    hun: { english: "Hungarian", german: "Ungarisch" },
+    //Indonesian
+    id: { english: "Indonesian", german: "Indonesisch" },
+    ind: { english: "Indonesian", german: "Indonesisch" },
+    //Italian
+    it: { english: "Italian", german: "Italienisch" },
+    ita: { english: "Italian", german: "Italienisch" },
+    //Japanese
+    ja: { english: "Japanese", german: "Japanisch" },
+    jpn: { english: "Japanese", german: "Japanisch" },
+    //Malayalam
+    ml: { english: "Malayalam", german: "Malayalam" },
+    mal: { english: "Malayalam", german: "Malayalam" },
+    //Norwegian
+    no: { english: "Norwegian", german: "Norwegisch" },
+    nor: { english: "Norwegian", german: "Norwegisch" },
+    //Polish
+    pl: { english: "Polish", german: "Polnisch" },
+    pol: { english: "Polish", german: "Polnisch" },
+    //Portuguese
+    pt: { english: "Portuguese", german: "Portugiesisch" },
+    por: { english: "Portuguese", german: "Portugiesisch" },
+    //Russian
+    ru: { english: "Russian", german: "Russisch" },
+    rus: { english: "Russian", german: "Russisch" },
+    //Spanish
+    es: { english: "Spanish", german: "Spanisch" },
+    spa: { english: "Spanish", german: "Spanisch" },
+    //Swedish
+    sv: { english: "Swedish", german: "Schwedisch" },
+    swe: { english: "Swedish", german: "Schwedisch" },
+    //Turkish
+    tr: { english: "Turkish", german: "Türkisch" },
+    tur: { english: "Turkish", german: "Türkisch" },
+    //Ukrainian
+    uk: { english: "Ukrainian", german: "Ukrainisch" },
+    ukr: { english: "Ukrainian", german: "Ukrainisch" },
+};
+
+const additionMap = {
+    english: {
+        visual_impaired: "Visually Impaired",
+        comment: "Commentary",
+        hearing_impaired: "SDH",
+        forced: "Forced"
+    },
+    german: {
+        visual_impaired: "Sehgeschädigt",
+        comment: "Kommentare",
+        hearing_impaired: "Hörgeschädigt",
+        forced: "Erzwungen"
+    }
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -63,10 +158,17 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 		response.infoLog += "☑ No modifications necessary. Nothing to do.\n";
 		return response;
 	}
-	
-	let titleLang = "??? ";
+
+	if (!file.ffProbeData || !file.ffProbeData.streams) {
+        response.infoLog += "⚠ No ffProbeData nor streams found.\n";
+        return response;
+    }
+
+	const selectedLanguage = inputs.rename_language || "english";
+
+	let titleLang = "???";
 	let titleAddition = "";
-	let titleSpacer ="| ";
+	let titleSpacer =" | ";
 	let titleCodec = "???";
 	let correctTitle = "???";
 	let audioIndex = 0;
@@ -82,18 +184,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 		const stream = file.ffProbeData.streams[i];
 		// ==================== LANGUAGE ====================
 		if (stream.tags && stream.tags.language) {
-			// German
-			if (stream.tags.language === "ger" || stream.tags.language === "deu") {
-				titleLang = "Deutsch ";
-			}
-			// English
-			if (stream.tags.language === "eng") {
-				titleLang = "Englisch ";
-			}
-			// Japanese
-			if (stream.tags.language === "jpn") {
-				titleLang = "Japanisch ";
-			}
+		    titleLang = languageMap[stream.tags.language]?.[selectedLanguage] || "???";
 		}
 		
 		// ==================== CODEC ====================
@@ -109,7 +200,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			// DTS
 			if (stream.codec_name === "dts") {
 				titleCodec = "DTS";
-				if (existingAudioTracks[audioIndex].Format_Commercial_IfAny !== undefined) {
+				if (existingAudioTracks[audioIndex] && existingAudioTracks[audioIndex].Format_Commercial_IfAny) {
 					titleCodec = existingAudioTracks[audioIndex].Format_Commercial_IfAny;
 				}
 			}
@@ -151,36 +242,34 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 		
 		// ==================== DISPOSITION ====================
 		if (stream.disposition) {
-			// Visual Impaired
-			if (stream.disposition.visual_impaired){
-				titleAddition = "Sehgeschädigt ";
-			}
-			// Comment
-			if (stream.disposition.comment){
-				titleAddition = "Kommentare ";
-			}
-			// Hearing Impaired
-			if (stream.disposition.hearing_impaired){
-				titleAddition = "SDH ";
-			}
-			// Forced
-			if (stream.disposition.forced){
-				titleAddition = "Forced ";
-			}
+			const additionLanguage = additionMap[selectedLanguage] || additionMap.english;  // Fallback to english
+
+            if (stream.disposition.visual_impaired) {
+                titleAddition = additionLanguage.visual_impaired;
+            }
+            if (stream.disposition.comment) {
+                titleAddition = additionLanguage.comment;
+            }
+            if (stream.disposition.hearing_impaired) {
+                titleAddition = additionLanguage.hearing_impaired;
+            }
+            if (stream.disposition.forced) {
+                titleAddition = additionLanguage.forced;
+            }
 		}
 		
 		// ==================== Check current title ====================
-		correctTitle = titleLang + titleAddition + titleSpacer + titleCodec;
-		
-		if (stream.codec_type.toLowerCase() === 'audio' && inputs.rename_audio_streams){
-			if (stream.tags.title != correctTitle){
+		correctTitle = titleLang + (titleAddition ? " (" + titleAddition + ")" : "") + titleSpacer + titleCodec;
+
+		if (stream.codec_type.toLowerCase() === 'audio' && inputs.rename_audio_streams) {
+			if (stream.tags && stream.tags.title !== correctTitle) {
 				ffmpegCommandInsert += `-metadata:s:a:${audioIndex} "title=${correctTitle}" `;
 				convert = true;
 			}
 			audioIndex += 1;
 		}
-		if (stream.codec_type.toLowerCase() === 'subtitle' && inputs.rename_subtitle_streams){
-			if (stream.tags.title != correctTitle){
+		if (stream.codec_type.toLowerCase() === 'subtitle' && inputs.rename_subtitle_streams) {
+			if (stream.tags && stream.tags.title !== correctTitle) {
 				ffmpegCommandInsert += `-metadata:s:s:${subtitleIndex} "title=${correctTitle}" `;
 				convert = true;
 			}
@@ -188,7 +277,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 		}
 		
 		// reset to make sure to find undefined streams which have to be added to the plugin
-		titleLang = "??? ";
+		titleLang = "???";
 		titleAddition = "";
 		titleCodec = "???";
 		correctTitle = "???"
@@ -197,7 +286,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	
 	const ffmpegCommand = `, ${ffmpegCommandInsert} -c copy -map 0 -max_muxing_queue_size 9999`;
 	
-	if(convert){
+	if(convert) {
 		response.processFile = true;
 		response.preset = ffmpegCommand;
 		response.container = "." + file.container;
