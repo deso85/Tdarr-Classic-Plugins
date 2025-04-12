@@ -16,52 +16,40 @@ const details = () => {
                 defaultValue: true,
                 inputUI: {
                     type: 'dropdown',
-                    options: [
-                        'false',
-                        'true',
-                    ],
+                    options: ['false', 'true',],
                 },
                 tooltip: 'Choose if you want to rename audio streams.\\n(default: true)',
             },
-			{
-				name: "rename_subtitle_streams",
-				type: 'boolean',
-				defaultValue: true,
-				inputUI: {
-					type: 'dropdown',
-					options: [
-						'false',
-						'true',
-					],
-				},
-				tooltip: 'Choose if you want to rename subtitle streams.\\n(default: true)',
-			},
-			{
-				name: "use_audio_channels",
-				type: 'boolean',
-				defaultValue: true,
-				inputUI: {
-					type: 'dropdown',
-					options: [
-						'false',
-						'true',
-					],
-				},
-				tooltip: 'Choose if you want to add channel layout information to audio stream names.\\n(default: true)',
-			},
-			{
-				name: "use_audio_bitrate",
-				type: 'boolean',
-				defaultValue: true,
-				inputUI: {
-					type: 'dropdown',
-					options: [
-						'false',
-						'true',
-					],
-				},
-				tooltip: 'Choose if you want to add bitrate information to audio stream names.\\n(default: true)',
-			},
+            {
+                name: "rename_subtitle_streams",
+                type: 'boolean',
+                defaultValue: true,
+                inputUI: {
+                    type: 'dropdown',
+                    options: ['false', 'true',],
+                },
+                tooltip: 'Choose if you want to rename subtitle streams.\\n(default: true)',
+            },
+            {
+                name: "use_audio_channels",
+                type: 'boolean',
+                defaultValue: true,
+                inputUI: {
+                    type: 'dropdown',
+                    options: ['false', 'true',],
+                },
+                tooltip: 'Choose if you want to add channel layout information to audio stream names.\\n(default: true)',
+            },
+            {
+                name: "use_audio_bitrate",
+                type: 'boolean',
+                defaultValue: true,
+                inputUI: {
+                    type: 'dropdown',
+                    options: ['false', 'true',],
+                },
+                tooltip: 'Choose if you want to add bitrate information to audio stream names.\\n(default: true)',
+            },
             {
                 name: "rename_language",
                 type: 'string',
@@ -71,9 +59,9 @@ const details = () => {
                     options: ['english', 'german'],
                 },
                 tooltip: 'Choose the language for renaming streams.\\n(default: english)',
-             }
-		],
-	};
+            }
+        ],
+    };
 };
 
 const languageMap = {
