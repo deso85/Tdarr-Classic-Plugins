@@ -10,19 +10,19 @@ const details = () => {
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
-			{
-				name: "rename_audio_streams",
-				type: 'boolean',
-				defaultValue: true,
-				inputUI: {
-					type: 'dropdown',
-					options: [
-						'false',
-						'true',
-					],
-				},
-				tooltip: 'Choose if you want to rename audio streams.\\n(default: true)',
-			},
+            {
+                name: "rename_audio_streams",
+                type: 'boolean',
+                defaultValue: true,
+                inputUI: {
+                    type: 'dropdown',
+                    options: [
+                        'false',
+                        'true',
+                    ],
+                },
+                tooltip: 'Choose if you want to rename audio streams.\\n(default: true)',
+            },
 			{
 				name: "rename_subtitle_streams",
 				type: 'boolean',
