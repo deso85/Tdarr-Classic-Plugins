@@ -1,15 +1,15 @@
 /* eslint-disable */
 const details = () => {
-	return {
-		id: "Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles",
-		Stage: "Pre-processing",
-		Name: "[Chasil] Renames audio and subtitle stream titles",
-		Operation: "Transcode",
-		Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-		Version: "3.0",
-		Link: "",
-		Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
-		Inputs: [
+    return {
+        id: "Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles",
+        Stage: "Pre-processing",
+        Name: "[Chasil] Renames audio and subtitle stream titles",
+        Operation: "Transcode",
+        Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
+        Version: "3.1",
+        Link: "",
+        Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
+        Inputs: [
 			{
 				name: "rename_audio_streams",
 				type: 'boolean',
@@ -161,6 +161,26 @@ const additionMap = {
     }
 };
 
+function calculateChannelLayout(channelList) {
+    // already correct formatted
+    if (channelList.match(/^\d+\.\d+$/)) {
+        return channelList;
+    }
+    if (channelList.toLowerCase() === "stereo") {
+        return "2.0";
+    }
+
+    if (channelList.toLowerCase() === "mono") {
+        return "1.0";
+    }
+
+    const channels = channelList.split(" ");
+    const hasLFE = channels.includes("LFE");
+    const channelCount = hasLFE ? channels.length - 1 : channels.length;
+
+    return `${channelCount}${hasLFE ? ".1" : ".0"}`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const plugin = (file, librarySettings, inputs, otherArguments) => {
 
@@ -272,9 +292,9 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
                 if(inputs.use_audio_channels) {
                     const channels = stream.channels || existingAudioTracks[audioIndex]?.Channels || "??";
                     const channelLayout = stream.channel_layout || existingAudioTracks[audioIndex]?.ChannelLayout || "";
-                    const formattedChannels = (channelLayout || `${channels}`).replace(/\(.*\)/g, "").trim(); // cuts additions like "(side)"
+                    const formattedChannels = calculateChannelLayout((channelLayout || `${channels}`).replace(/\(.*\)/g, "").trim()); // cuts additions like "(side)"
 
-                    titleCodec += ` ${formattedChannels.toLowerCase() === "stereo" ? "2.0" : formattedChannels}`;
+                    titleCodec += ` ${formattedChannels}`;
                 }
 
                 if(inputs.use_audio_bitrate) {
