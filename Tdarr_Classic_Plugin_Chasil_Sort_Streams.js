@@ -98,7 +98,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         });
 
     // Generate FFmpeg preset command
-    const ffmpegCommand = `, ${ffmpegCommandInsert}-c copy -max_muxing_queue_size 9999`;
+    const ffmpegCommand = `, -fflags +bitexact -flags:v +bitexact -flags:a +bitexact ${ffmpegCommandInsert}-c copy -max_muxing_queue_size 9999`;
 	response.infoLog += `ffmpeg command: `+ffmpegCommand+`\n`;
 	
     // Set response for Tdarr

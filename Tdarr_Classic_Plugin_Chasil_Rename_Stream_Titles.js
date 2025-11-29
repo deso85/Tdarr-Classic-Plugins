@@ -251,8 +251,12 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			// TrueHD
 			if (stream.codec_name === "truehd") {
 				titleCodec = "TrueHD";
+				// Check for Atmos in profile or additional streams
+				if (existingAudioTracks[audioIndex]?.Format_Commercial_IfAny?.includes("Atmos") ||
+                    existingAudioTracks[audioIndex]?.Format_AdditionalFeatures?.includes("JOC")) {
+                    titleCodec = "TrueHD Atmos";
+                }
 			}
-			// TrueHD Atmos
 
 			// Advanced SubStation Alpha
 			if (stream.codec_name === "ass") {
@@ -306,6 +310,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
                             const qualityValue = stream.tags?.quality_value || existingAudioTracks[audioIndex]?.Quality_Value || "unknown QV";
                             titleCodec += ` (Quality: ${qualityValue})`;
                         } else {
+                            //TODO: Find bitrate or quality if metadata doesn't have the info
                             titleCodec += " (?? kbps)";
                         }
                     }
@@ -357,7 +362,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	}
 
 
-	const ffmpegCommand = `, ${ffmpegCommandInsert} -c copy -map 0 -max_muxing_queue_size 9999`;
+	const ffmpegCommand = `, -fflags +bitexact -flags:v +bitexact -flags:a +bitexact ${ffmpegCommandInsert} -c copy -map 0 -max_muxing_queue_size 9999`;
 
 	if(convert) {
 		response.processFile = true;
