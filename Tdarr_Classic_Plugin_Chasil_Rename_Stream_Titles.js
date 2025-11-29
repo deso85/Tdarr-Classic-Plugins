@@ -142,9 +142,9 @@ const additionMap = {
         forced: "Forced"
     },
     german: {
-        visual_impaired: "Sehgeschädigt",
+        visual_impaired: "Sehbehindert",
         comment: "Kommentare",
-        hearing_impaired: "Hörgeschädigt",
+        hearing_impaired: "Schwerhörig",
         forced: "Erzwungen"
     }
 };
