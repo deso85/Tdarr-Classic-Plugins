@@ -24,7 +24,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	var response = {
 		processFile: false,  // No processing needed since this is for logging only
 		preset: "",
-		container: ".mp4",  // Default to .mp4, unless changed by stream's container
+		container: ".mkv",
 		handBrakeMode: false,
 		FFmpegMode: false,
 		reQueueAfter: false,
