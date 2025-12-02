@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Sort Streams by Type, Title and Language",
         Operation: "Transcode",
         Description: "Sorts streams by type (video, audio, subtitle, chapter) and title. Video streams by language.",
-        Version: "1.1",
+        Version: "1.3",
         Link: "",
         Tags: "pre-processing,sorting,ffmpeg",
         Inputs: [],
@@ -14,7 +14,7 @@ const details = () => {
 };
 
 const plugin = (file, librarySettings, inputs, otherArguments) => {
-	
+
     var response = {
         processFile: false,
         preset: "",
@@ -24,18 +24,17 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         reQueueAfter: false,
         infoLog: "",
     };
-	
+
 	let ffmpegCommandInsert = "";
-	let convert = false;
-	
+
     const streams = file.ffProbeData.streams;
-	
+
 	// Check if there are streams present
     if (!streams || streams.length === 0) {
         response.infoLog += "⚠️ No streams found in the file.\n";
         return response; // Early exit if no streams are found
     }
-	
+
     // Group streams into categories
     const sortedStreams = {
         video: [],
@@ -61,35 +60,25 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	const getStreamTitle = (stream) => (stream.tags && stream.tags.title) ? stream.tags.title.toLowerCase() : "";
 
 	const normalizeTitle = (title) => title.replace(/[()]/g, "").toLowerCase();
-		
+
     // Sort video streams by language
-	sortedStreams.video.sort((a, b) => {
-	    const comparison = getStreamLanguage(a.stream).localeCompare(getStreamLanguage(b.stream));
-	    if (comparison < 0) {
-	        convert = true;
-	    }
-	    return comparison;
-	});
+	sortedStreams.video.sort((a, b) => getStreamLanguage(a.stream).localeCompare(getStreamLanguage(b.stream)));
 
-    // Sort audio streams by title
-	sortedStreams.audio.sort((a, b) => {
-	    const comparison = getStreamTitle(a.stream).localeCompare(getStreamTitle(b.stream));
-	    if (comparison < 0) {
-	        convert = true;
-	    }
-	    return comparison;
-	});
+    // Sort audio streams by title (normalized)
+	sortedStreams.audio.sort((a, b) =>
+	    normalizeTitle(getStreamTitle(a.stream)).localeCompare(normalizeTitle(getStreamTitle(b.stream)))
+	);
 
-    // Sort subtitles by language and type
-	sortedStreams.subtitle.sort((a, b) => {
-	    const comparison = normalizeTitle(getStreamTitle(a.stream))
-            .localeCompare(normalizeTitle(getStreamTitle(b.stream)));
-	    //const comparison = getStreamTitle(a.stream).localeCompare(getStreamTitle(b.stream));
-	    if (comparison < 0) {
-	        convert = true;
-	    }
-	    return comparison;
-	});
+    // Sort subtitles by title (normalized)
+	sortedStreams.subtitle.sort((a, b) =>
+        normalizeTitle(getStreamTitle(a.stream)).localeCompare(normalizeTitle(getStreamTitle(b.stream)))
+    );
+
+    // Vergleiche ursprüngliche mit neuer Reihenfolge
+    const originalOrder = streams.map((_, idx) => idx);
+    const newOrder = [...sortedStreams.video, ...sortedStreams.audio, ...sortedStreams.subtitle, ...sortedStreams.chapter].map(e => e.index);
+
+    let convert = JSON.stringify(originalOrder) !== JSON.stringify(newOrder);
 
     // Generate FFmpeg map command based on sorted streams
     [...sortedStreams.video, ...sortedStreams.audio, ...sortedStreams.subtitle, ...sortedStreams.chapter]
@@ -99,8 +88,8 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
     // Generate FFmpeg preset command
     const ffmpegCommand = `, -fflags +bitexact -flags:v +bitexact -flags:a +bitexact ${ffmpegCommandInsert}-c copy -max_muxing_queue_size 9999`;
-	response.infoLog += `ffmpeg command: `+ffmpegCommand+`\n`;
-	
+	response.infoLog += `ffmpeg command: ` + ffmpegCommand + "\n";
+
     // Set response for Tdarr
 	if(convert) {
 	    response.processFile = true;
@@ -110,7 +99,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 	    response.FFmpegMode = true;
 	    response.reQueueAfter = true;
 	    response.infoLog += `☒ Streams were sorted successfully.\n`;
-	}
+	} else {
+        response.infoLog += `✔️ Streams already in correct order.\n`;
+    }
+
     return response;
 };
 

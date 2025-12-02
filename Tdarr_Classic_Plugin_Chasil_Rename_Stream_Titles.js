@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Renames audio and subtitle stream titles",
         Operation: "Transcode",
         Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-        Version: "3.1",
+        Version: "3.2",
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
@@ -65,6 +65,16 @@ const details = () => {
 };
 
 const languageMap = {
+    //Arabic
+    ar: { english: "Arabic", german: "Arabisch" },
+    ara: { english: "Arabic", german: "Arabisch" },
+    //Bulgarian
+    bg: { english: "Bulgarian", german: "Bulgarisch" },
+    bul: { english: "Bulgarian", german: "Bulgarisch" },
+    //Chinese
+    zh: { english: "Chinese", german: "Chinesisch" },
+    chi: { english: "Chinese", german: "Chinesisch" },
+    zho: { english: "Chinese", german: "Chinesisch" },
     //Croatian
     hr: { english: "Croatian", german: "Kroatisch" },
     hrv: { english: "Croatian", german: "Kroatisch" },
@@ -93,9 +103,19 @@ const languageMap = {
     //Greek
     el: { english: "Greek", german: "Griechisch" },
     gre: { english: "Greek", german: "Griechisch" },
+    //Hebrew
+    he: { english: "Hebrew", german: "Hebräisch" },
+    heb: { english: "Hebrew", german: "Hebräisch" },
+    //Hindi
+    hi: { english: "Hindi", german: "Hindi" },
+    hin: { english: "Hindi", german: "Hindi" },
     //Hungarian
     hu: { english: "Hungarian", german: "Ungarisch" },
     hun: { english: "Hungarian", german: "Ungarisch" },
+    //Icelandic
+    is: { english: "Icelandic", german: "Isländisch" },
+    isl: { english: "Icelandic", german: "Isländisch" },
+    ice: { english: "Icelandic", german: "Isländisch" },
     //Indonesian
     id: { english: "Indonesian", german: "Indonesisch" },
     ind: { english: "Indonesian", german: "Indonesisch" },
@@ -105,6 +125,9 @@ const languageMap = {
     //Japanese
     ja: { english: "Japanese", german: "Japanisch" },
     jpn: { english: "Japanese", german: "Japanisch" },
+    //Korean
+    ko: { english: "Korean", german: "Koreanisch" },
+    kor: { english: "Korean", german: "Koreanisch" },
     //Malayalam
     ml: { english: "Malayalam", german: "Malayalam" },
     mal: { english: "Malayalam", german: "Malayalam" },
@@ -117,21 +140,41 @@ const languageMap = {
     //Portuguese
     pt: { english: "Portuguese", german: "Portugiesisch" },
     por: { english: "Portuguese", german: "Portugiesisch" },
+    //Romanian
+    ro: { english: "Romanian", german: "Rumänisch" },
+    rum: { english: "Romanian", german: "Rumänisch" },
+    ron: { english: "Romanian", german: "Rumänisch" },
     //Russian
     ru: { english: "Russian", german: "Russisch" },
     rus: { english: "Russian", german: "Russisch" },
+    //Serbian
+    sr: { english: "Serbian", german: "Serbisch" },
+    srp: { english: "Serbian", german: "Serbisch" },
+    //Slovak
+    sk: { english: "Slovak", german: "Slowakisch" },
+    slo: { english: "Slovak", german: "Slowakisch" },
+    slk: { english: "Slovak", german: "Slowakisch" },
+    //Slovenian
+    sl: { english: "Slovenian", german: "Slowenisch" },
+    slv: { english: "Slovenian", german: "Slowenisch" },
     //Spanish
     es: { english: "Spanish", german: "Spanisch" },
     spa: { english: "Spanish", german: "Spanisch" },
     //Swedish
     sv: { english: "Swedish", german: "Schwedisch" },
     swe: { english: "Swedish", german: "Schwedisch" },
+    //Thai
+    th: { english: "Thai", german: "Thailändisch" },
+    tha: { english: "Thai", german: "Thailändisch" },
     //Turkish
     tr: { english: "Turkish", german: "Türkisch" },
     tur: { english: "Turkish", german: "Türkisch" },
     //Ukrainian
     uk: { english: "Ukrainian", german: "Ukrainisch" },
     ukr: { english: "Ukrainian", german: "Ukrainisch" },
+    //Vietnamese
+    vi: { english: "Vietnamese", german: "Vietnamesisch" },
+    vie: { english: "Vietnamese", german: "Vietnamesisch" },
 };
 
 const additionMap = {
