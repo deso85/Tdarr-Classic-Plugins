@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Renames audio and subtitle stream titles",
         Operation: "Transcode",
         Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-        Version: "3.4",
+        Version: "3.5",
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
@@ -68,12 +68,19 @@ const languageMap = {
     //Arabic
     ar: { english: "Arabic", german: "Arabisch" },
     ara: { english: "Arabic", german: "Arabisch" },
+    //Basque
+    eu:  { english: "Basque", german: "Baskisch" },
+    baq: { english: "Basque", german: "Baskisch" },
+    eus: { english: "Basque", german: "Baskisch" },
     //Bengali
     bn: { english: "Bengali", german: "Bengalisch" },
     ben: { english: "Bengali", german: "Bengalisch" },
     //Bulgarian
     bg: { english: "Bulgarian", german: "Bulgarisch" },
     bul: { english: "Bulgarian", german: "Bulgarisch" },
+    //Catalan
+    ca:  { english: "Catalan", german: "Katalanisch" },
+    cat: { english: "Catalan", german: "Katalanisch" },
     //Chinese
     zh: { english: "Chinese", german: "Chinesisch" },
     chi: { english: "Chinese", german: "Chinesisch" },
@@ -102,6 +109,9 @@ const languageMap = {
     //French
     fr: { english: "French", german: "Französisch" },
     fre: { english: "French", german: "Französisch" },
+    //Galician
+    gl:  { english: "Galician", german: "Galicisch" },
+    glg: { english: "Galician", german: "Galicisch" },
     //German
     de: { english: "German", german: "Deutsch" },
     ger: { english: "German", german: "Deutsch" },
@@ -131,6 +141,9 @@ const languageMap = {
     //Japanese
     ja: { english: "Japanese", german: "Japanisch" },
     jpn: { english: "Japanese", german: "Japanisch" },
+    //Kannada
+    kn:  { english: "Kannada", german: "Kannada" },
+    kan: { english: "Kannada", german: "Kannada" },
     //Korean
     ko: { english: "Korean", german: "Koreanisch" },
     kor: { english: "Korean", german: "Koreanisch" },
@@ -178,6 +191,9 @@ const languageMap = {
     //Swedish
     sv: { english: "Swedish", german: "Schwedisch" },
     swe: { english: "Swedish", german: "Schwedisch" },
+    //Tamil
+    ta:  { english: "Tamil", german: "Tamil" },
+    tam: { english: "Tamil", german: "Tamil" },
     //Telugu
     te: { english: "Telugu", german: "Telugu" },
     tel: { english: "Telugu", german: "Telugu" },
