@@ -68,6 +68,9 @@ const languageMap = {
     //Arabic
     ar: { english: "Arabic", german: "Arabisch" },
     ara: { english: "Arabic", german: "Arabisch" },
+    //Bengali
+    bn: { english: "Bengali", german: "Bengalisch" },
+    ben: { english: "Bengali", german: "Bengalisch" },
     //Bulgarian
     bg: { english: "Bulgarian", german: "Bulgarisch" },
     bul: { english: "Bulgarian", german: "Bulgarisch" },
@@ -134,6 +137,9 @@ const languageMap = {
     //Malayalam
     ml: { english: "Malayalam", german: "Malayalam" },
     mal: { english: "Malayalam", german: "Malayalam" },
+    //Marathi
+    mr: { english: "Marathi", german: "Marathi" },
+    mar: { english: "Marathi", german: "Marathi" },
     //Norwegian
     no: { english: "Norwegian", german: "Norwegisch" },
     nor: { english: "Norwegian", german: "Norwegisch" },
@@ -169,6 +175,9 @@ const languageMap = {
     //Swedish
     sv: { english: "Swedish", german: "Schwedisch" },
     swe: { english: "Swedish", german: "Schwedisch" },
+    //Telugu
+    te: { english: "Telugu", german: "Telugu" },
+    tel: { english: "Telugu", german: "Telugu" },
     //Thai
     th: { english: "Thai", german: "Thailändisch" },
     tha: { english: "Thai", german: "Thailändisch" },
