@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Renames audio and subtitle stream titles",
         Operation: "Transcode",
         Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-        Version: "3.3",
+        Version: "3.4",
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
@@ -93,6 +93,9 @@ const languageMap = {
     //English
     en: { english: "English", german: "Englisch" },
     eng: { english: "English", german: "Englisch" },
+    // Filipino / Tagalog
+    fil: { english: "Filipino", german: "Filipino" },
+    tgl: { english: "Tagalog", german: "Tagalog" },
     //Finnish
     fi: { english: "Finnish", german: "Finnisch" },
     fin: { english: "Finnish", german: "Finnisch" },
