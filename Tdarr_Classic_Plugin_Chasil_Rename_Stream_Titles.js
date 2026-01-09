@@ -321,6 +321,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			if (stream.codec_name === "eac3") {
 				titleCodec = "E-AC3";
 			}
+			//MP3
+			if (stream.codec_name === "mp3") {
+                titleCodec = "MP3";
+            }
 			// Opus
 			if (stream.codec_name === "opus") {
 				titleCodec = "Opus";
