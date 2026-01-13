@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Renames audio and subtitle stream titles",
         Operation: "Transcode",
         Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-        Version: "3.5",
+        Version: "3.6",
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
@@ -246,6 +246,73 @@ function calculateChannelLayout(channelList) {
     return `${channelCount}${hasLFE ? ".1" : ".0"}`;
 }
 
+function isVbrAudioStream(stream, audioTrack) {
+    const lowerIncludes = (val, substr) =>
+        typeof val === "string" && val.toLowerCase().includes(substr);
+
+    const modeCandidates = [
+        stream?.tags?.bit_rate_mode,
+        stream?.tags?.Bit_rate_mode,
+        stream?.tags?.BitRate_Mode,
+        stream?.tags?.BPS_Mode,
+        audioTrack?.BitRate_Mode,
+        audioTrack?.BitRate_Mode_Original,
+        audioTrack?.BitRate_Mode_String,
+    ];
+
+    for (const val of modeCandidates) {
+        if (
+            lowerIncludes(val, "vbr") ||
+            lowerIncludes(val, "variable") ||
+            lowerIncludes(val, "abr")
+        ) {
+            return true;
+        }
+    }
+
+    const encoderCandidates = [
+        stream?.tags?.encoder,
+        stream?.tags?.encoding_settings,
+        audioTrack?.Encoding_Settings,
+        audioTrack?.Encoded_Library_Settings,
+    ];
+
+    for (const val of encoderCandidates) {
+        if (!val) continue;
+        const s = val.toLowerCase();
+        if (
+            s.includes("vbr") ||
+            /-v\s*\d/.test(s) ||
+            /-q\s*\d/.test(s)
+        ) {
+            return true;
+        }
+    }
+
+    const codec = (stream?.codec_name || "").toLowerCase();
+    if (["opus", "vorbis"].includes(codec)) {
+        return true;
+    }
+
+    return false;
+}
+
+function getAudioBitrateKbps(stream, audioTrack) {
+    const raw =
+        stream?.bit_rate ||
+        audioTrack?.BitRate ||
+        audioTrack?.BitRate_Nominal;
+
+    if (!raw) return null;
+
+    const numeric = Number(String(raw).replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+        return null;
+    }
+
+    return Math.round(numeric / 1000);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const plugin = (file, librarySettings, inputs, otherArguments) => {
 
@@ -362,9 +429,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
             // add channels and bitrade for audio streams
             if (existingAudioTracks[audioIndex] && stream.codec_type.toLowerCase() === 'audio') {
+                const audioTrack = existingAudioTracks[audioIndex];
                 if(inputs.use_audio_channels) {
-                    const channels = stream.channels || existingAudioTracks[audioIndex]?.Channels || "??";
-                    const channelLayout = stream.channel_layout || existingAudioTracks[audioIndex]?.ChannelLayout || "";
+                    const channels = stream.channels || audioTrack?.Channels || "??";
+                    const channelLayout = stream.channel_layout || audioTrack?.ChannelLayout || "";
                     const formattedChannels = calculateChannelLayout((channelLayout || `${channels}`).replace(/\(.*\)/g, "").trim()); // cuts additions like "(side)"
 
                     titleCodec += ` ${formattedChannels}`;
@@ -372,27 +440,26 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
                 if(inputs.use_audio_bitrate) {
                     // print bitrate if it is not a lossless codec
-                    const compressionMode = existingAudioTracks[audioIndex]?.Compression_Mode || stream.tags?.Compression_Mode || "";
+                    const compressionMode = (audioTrack?.Compression_Mode || stream.tags?.Compression_Mode || "").toLowerCase();
 
-                    if (compressionMode.toLowerCase() !== "lossless" &&
-                        titleCodec &&
-                        !(titleCodec.includes("DTS-HD MA") ||
+                    const isLosslessCodec =
+                        titleCodec.includes("DTS-HD MA") ||
                         titleCodec.includes("TrueHD") ||
                         titleCodec.includes("FLAC") ||
-                        titleCodec.includes("PCM"))) {
+                        titleCodec.includes("PCM");
 
-                        // check if bitrate exists
-                        const bitrate = stream.bit_rate || existingAudioTracks[audioIndex]?.BitRate;
+                    if (compressionMode !== "lossless" && !isLosslessCodec) {
 
-                        if (bitrate) {
-                            titleCodec += ` (${Math.round(bitrate / 1000)} kbps)`;
-                        } else if (stream.tags?.quality_value || existingAudioTracks[audioIndex]?.Quality_Value) {
-                            // Fallback auf Quality Value
-                            const qualityValue = stream.tags?.quality_value || existingAudioTracks[audioIndex]?.Quality_Value || "unknown QV";
-                            titleCodec += ` (Quality: ${qualityValue})`;
+                        // 1. VBR?
+                        if (isVbrAudioStream(stream, audioTrack)) {
+                            titleCodec += " (VBR)";
                         } else {
-                            //TODO: Find bitrate or quality if metadata doesn't have the info
-                            titleCodec += " (?? kbps)";
+                            // 2. use bitrate if known
+                            const kbps = getAudioBitrateKbps(stream, audioTrack);
+                            if (kbps) {
+                                titleCodec += ` (${kbps} kbps)`;
+                            }
+                            // 3. don't know if VBR or the bitrate
                         }
                     }
                 }
