@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Renames audio and subtitle stream titles",
         Operation: "Transcode",
         Description: "[Contains built-in filter] Renames audio and subtitle stream titles based on language and codec.",
-        Version: "3.6",
+        Version: "3.7",
         Link: "",
         Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
         Inputs: [
@@ -388,7 +388,11 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			if (stream.codec_name === "eac3") {
 				titleCodec = "E-AC3";
 			}
-			//MP3
+			// FLAC
+            if (stream.codec_name === "flac") {
+                titleCodec = "FLAC";
+            }
+			// MP3
 			if (stream.codec_name === "mp3") {
                 titleCodec = "MP3";
             }
