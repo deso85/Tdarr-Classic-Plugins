@@ -49,16 +49,28 @@ The renaming currently happens in German only, meaning that stream titles are ou
 ![Example before and after renaming](./img/rename_stream_titles_example.png)
 
 ## Tdarr_Classic_Plugin_Chasil_Sort_Streams
-This plugin sorts streams in a media file by type (video, audio, subtitle, chapter) and a secondary criteria. The plugin helps to ensure a consistent and logical stream order, improving accessibility and compatibility.
+This plugin sorts streams in a media file by type (video, audio, subtitle, chapter)
+and a secondary criteria. The plugin helps to ensure a consistent and logical stream
+order, improving accessibility and compatibility.
 
 ### Sorting Details
-- **Video Streams**: Sorted by language.
-- **Audio Streams**: Sorted by title.
-- **Subtitle Streams**: Sorted by title.
-- **Chapter Streams**: Kept intact but appended in the correct order after the other streams.
+- **Video Streams**: Sorted by language (streams without a language tag are placed last).
+- **Audio Streams**: Sorted by title (normalized — parentheses are removed,
+  comparison is case-insensitive). Streams without a title are placed first.
+- **Subtitle Streams**: Sorted by title (same normalization as audio).
+- **Chapter Streams**: Not sorted individually, but appended after the other
+  stream types.
 
-### Usage:
-This plugin ensures that streams are ordered logically. It can be used to fix inconsistencies in media files where stream order is jumbled or unclear.
+### Behavior
+- The plugin compares the current stream order with the desired order and
+  **skips processing** if the file is already sorted correctly.
+- When processing is needed, streams are remapped using FFmpeg stream copy
+  (no re-encoding).
+- The `bitexact` flags are set to avoid unnecessary metadata changes.
+
+### Usage
+This plugin requires no configuration. Simply add it to your library or flow
+to ensure streams are ordered logically.
 
 ## Tdarr_Classic_Plugin_Chasil_Set_Disposition_Flags_From_Stream_Titles
 This plugin parses audio and subtitle stream titles and sets matching disposition flags automatically. It detects keywords in both German and English and only re-encodes (stream copy) when flags are actually missing — leaving existing flags untouched.
