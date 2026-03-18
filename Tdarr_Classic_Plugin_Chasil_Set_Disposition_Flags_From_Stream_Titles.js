@@ -7,7 +7,7 @@ const details = () => {
         Description: "Parses stream titles and sets matching disposition flags (forced, commentary, hearing/visual impaired). "
             + "Each input field accepts comma-separated regex patterns (case-insensitive). "
             + "Leave empty to use defaults.",
-        Version: "1.0",
+        Version: "1.1",
         Tags: "pre-processing",
         Inputs: [
             {
@@ -33,7 +33,7 @@ const details = () => {
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for hearing_impaired disposition (comma-separated). '
                 + 'Defaults: sdh, hearing.?impaired, hard.?of.?hearing, closed.?caption, '
-                + 'hörgeschädigt, \\bcc\\b',
+                + 'hörgeschädigt, schwerhörig, \\bcc\\b',
             },
             {
                 name: 'visualImpairedPatterns',
@@ -63,6 +63,7 @@ const DEFAULT_PATTERNS = {
         /hard.?of.?hearing/i,
         /closed.?caption/i,
         /hörgeschädigt/i,
+        /schwerhörig/i,
         /\bcc\b/i,
     ],
     visual_impaired: [
@@ -74,52 +75,42 @@ const DEFAULT_PATTERNS = {
     ],
 };
 
-// Maps input field names to their corresponding FFmpeg disposition flag
-const INPUT_TO_DISPOSITION = {
+// Map input field names to their corresponding disposition keys
+const INPUT_MAP = {
     forcedPatterns: 'forced',
     commentPatterns: 'comment',
     hearingImpairedPatterns: 'hearing_impaired',
     visualImpairedPatterns: 'visual_impaired',
 };
 
-// Parses a comma-separated string of user-defined patterns into RegExp objects
-const parseCustomPatterns = (input) => {
-    if (!input || !input.trim()) return [];
-
-    return input
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0)
-        .map((s) => {
-            try {
-                return new RegExp(s, 'i');
-            } catch (e) {
-                // Skip invalid regex patterns
-                return null;
-            }
-        })
-        .filter((r) => r !== null);
-};
-
-// Merges default patterns with any user-defined custom patterns
+/**
+ * Merges default patterns with user-supplied patterns from inputs.
+ * User patterns are provided as comma-separated regex strings.
+ */
 const buildPatterns = (inputs) => {
     const patterns = {};
 
-    for (const [disposition, defaults] of Object.entries(DEFAULT_PATTERNS)) {
-        patterns[disposition] = [...defaults];
-    }
+    for (const [inputKey, dispositionKey] of Object.entries(INPUT_MAP)) {
+        patterns[dispositionKey] = [...DEFAULT_PATTERNS[dispositionKey]];
 
-    for (const [inputName, disposition] of Object.entries(INPUT_TO_DISPOSITION)) {
-        const custom = parseCustomPatterns(inputs[inputName]);
-        if (custom.length > 0) {
-            patterns[disposition].push(...custom);
+        const userValue = inputs[inputKey];
+        if (userValue && typeof userValue === 'string' && userValue.trim()) {
+            const userPatterns = userValue
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+                .map((s) => new RegExp(s, 'i'));
+            patterns[dispositionKey].push(...userPatterns);
         }
     }
 
     return patterns;
 };
 
-// Tests a stream title against all patterns and returns matched dispositions
+/**
+ * Tests the given title against all pattern groups and returns
+ * an object with disposition flags set to 1 (match) or 0 (no match).
+ */
 const detectDispositions = (title, patterns) => {
     const detected = {};
 
@@ -145,11 +136,30 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     };
 
     const patterns = buildPatterns(inputs);
+
+    // Log active patterns per disposition for transparency
+    response.infoLog += '=== Active Patterns ===\n';
+    for (const [disposition, regexes] of Object.entries(patterns)) {
+        const patternStrings = regexes.map((r) => r.source).join(', ');
+        response.infoLog += `  ${disposition}: ${patternStrings}\n`;
+    }
+    response.infoLog += '\n';
+
+    // Log stream overview
+    const totalStreams = file.ffProbeData.streams.length;
+    response.infoLog += `=== Scanning ${totalStreams} stream(s) ===\n`;
+
     let dispositionArgs = [];
 
     file.ffProbeData.streams.forEach((stream, index) => {
+        const codec = stream.codec_type || 'unknown';
         const title = (stream.tags && stream.tags.title) || '';
-        if (!title) return;
+
+        // Skip streams without a title and log them
+        if (!title) {
+            response.infoLog += `  Stream ${index} (${codec}): No title — skipped.\n`;
+            return;
+        }
 
         const detected = detectDispositions(title, patterns);
         const activeFlags = Object.entries(detected)
@@ -157,7 +167,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
             .map(([key]) => key);
 
         // No matching disposition patterns found for this stream
-        if (activeFlags.length === 0) return;
+        if (activeFlags.length === 0) {
+            response.infoLog += `  Stream ${index} (${codec}, "${title}"): No matches.\n`;
+            return;
+        }
 
         const currentDisposition = stream.disposition || {};
 
@@ -171,11 +184,14 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 
         // All detected flags are already set, nothing to do
         if (newFlags.length === 0) {
-            response.infoLog += `Stream ${index} ("${title}"): ${activeFlags.join(', ')} already set.\n`;
+            response.infoLog += `  Stream ${index} (${codec}, "${title}"): `
+                + `${activeFlags.join(', ')} already set.\n`;
             return;
         }
 
-        response.infoLog += `Stream ${index} ("${title}"): Adding ${newFlags.join(', ')}\n`;
+        response.infoLog += `  Stream ${index} (${codec}, "${title}"): `
+            + `Adding ${newFlags.join(', ')} `
+            + `(existing: ${existingFlags.length > 0 ? existingFlags.join(', ') : 'none'})\n`;
 
         // Combine existing and new flags to preserve flags like 'default'
         const allFlags = [...new Set([...existingFlags, ...activeFlags])];
@@ -184,14 +200,19 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         dispositionArgs.push(dispositionString);
     });
 
+    response.infoLog += '\n';
+
     if (dispositionArgs.length === 0) {
-        response.infoLog += 'No disposition changes needed.\n';
+        response.infoLog += '=== Result: No disposition changes needed. ===\n';
         return response;
     }
 
     response.processFile = true;
     response.preset = `,-map 0 -c copy ${dispositionArgs.join(' ')}`;
-    response.infoLog += `Applying disposition changes to ${dispositionArgs.length / 2} stream(s).\n`;
+
+    // Log summary and the resulting FFmpeg arguments
+    response.infoLog += `=== Result: Updating ${dispositionArgs.length / 2} stream(s). ===\n`;
+    response.infoLog += `FFmpeg args: -map 0 -c copy ${dispositionArgs.join(' ')}\n`;
 
     return response;
 };
