@@ -155,7 +155,13 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         const codec = stream.codec_type || 'unknown';
         const title = (stream.tags && stream.tags.title) || '';
 
-        // Skip streams without a title and log them
+       // Skip non-audio/subtitle streams
+       if (codec !== 'audio' && codec !== 'subtitle') {
+           response.infoLog += `  Stream ${index} (${codec}): Not applicable — skipped.\n`;
+           return;
+       }
+
+       // Skip streams without a title and log them
         if (!title) {
             response.infoLog += `  Stream ${index} (${codec}): No title — skipped.\n`;
             return;
