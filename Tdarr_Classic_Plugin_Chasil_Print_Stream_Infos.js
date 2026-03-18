@@ -5,10 +5,10 @@ const details = () => {
 		Stage: "Pre-processing",
 		Name: "[Chasil] Print Stream Infos",
 		Operation: "Transcode",
-		Description: "[Contains built-in filter] Prints all stream infos.",
-		Version: "1.4",
+		Description: "Prints all stream infos.",
+		Version: "1.5",
 		Link: "",
-		Tags: "pre-processing,audio,subtitle,ffmpeg,configurable",
+		Tags: "pre-processing,audio,subtitle,video,informational",
 		Inputs: [],
 	};
 };
@@ -66,7 +66,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
 			}
 		}
 		if (file.mediaInfo && file.mediaInfo.track && file.mediaInfo.track[i+1] && file.mediaInfo.track[(i+1)].Format_Commercial_IfAny) {
-			response.infoLog += "Media Info: " + file.mediaInfo.track[(i+1)].Format_Commercial_IfAny + "\n";
+			response.infoLog += "Commercial Format: " + file.mediaInfo.track[(i+1)].Format_Commercial_IfAny + "\n";
 		}
 		if (stream.channels) {
 		    let channels = stream.channels || existingAudioTracks[audioIndex]?.Channels;

@@ -4,6 +4,16 @@ Here are the custom plugins I've made for Tdarr. These plugins help with streaml
 ## Tdarr_Classic_Plugin_Chasil_Print_Stream_Infos
 This classic plugin prints out information about the different streams. The information can be shown in the report or logfile. I use it primarily for debugging purposes.
 
+### Logged information per stream
+- Codec type, name and long name
+- Video/Audio codec name (when available)
+- Profile
+- Language and title
+- Codec ID
+- Commercial format name (e.g. "Dolby Digital Plus") via MediaInfo
+- Channel layout (formatted, e.g. "2.0" instead of "stereo")
+- Audio bitrate (kbps) or quality value as fallback
+
 ### Example output inside report
 ![Example output inside report](./img/print_stream_infos_example.png)
 
@@ -103,7 +113,7 @@ To install and use any of these Tdarr plugins, follow these steps:
     - Navigate to the **Classic Plugins** section to check if the plugin has been recognized
 
 4. **Usage**
-    - Go to the **Libraries** sectiom
+    - Go to the **Libraries** section
     - Edit an existing library or create a new one
     - Go to **Transcoder Options** and add the Plugin via drag and drop from the plugins list on the right
     - Configure the plugin if possible by clicking on it
