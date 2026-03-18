@@ -17,6 +17,34 @@ This classic plugin prints out information about the different streams. The info
 ### Example output inside report
 ![Example output inside report](./img/print_stream_infos_example.png)
 
+## Tdarr_Classic_Plugin_Chasil_Change_Video_Properties
+
+This plugin removes unwanted metadata and flags from video files, including the
+overall file title, video stream titles, video stream languages, and the forced
+disposition flag on video streams. It only triggers a transcode (stream copy, no
+re-encoding) when at least one property actually needs to be changed.
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `remove_title` | Boolean | `true` | Remove the overall file metadata title if it is set. |
+| `remove_video_title` | Boolean | `true` | Remove the title tag from video streams if set. |
+| `remove_video_language` | Boolean | `true` | Remove the language tag from video streams if set. |
+| `remove_video_forced_flag` | Boolean | `true` | Remove the forced disposition flag from video streams if set. |
+
+### Behavior
+
+- The plugin checks whether the file is a video; non-video files are skipped.
+- Each option is evaluated independently — only the enabled checks are applied.
+- If all four options are set to `false`, the plugin skips processing entirely.
+- The plugin compares current metadata/flags against the desired state and
+  **skips processing** if nothing needs to be changed.
+- When processing is needed, streams are copied using FFmpeg (no re-encoding).
+  The `bitexact` flags are set to avoid unnecessary metadata changes.
+- The output container matches the input container (e.g. `.mkv` stays `.mkv`).
+
+
 ## Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles
 
 This plugin renames audio and subtitle stream titles based on their language, codec, and optionally channel layout and bitrate information. It ensures consistent and readable stream names across your media library.
