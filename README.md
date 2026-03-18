@@ -18,35 +18,68 @@ This classic plugin prints out information about the different streams. The info
 ![Example output inside report](./img/print_stream_infos_example.png)
 
 ## Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles
-This plugin renames the audio and subtitle stream titles for better organization and readability. It's especially useful for standardizing stream names across different files.
 
-### Renaming Structure
-The renaming follows a specific format based on the language and codec of each stream:
+This plugin renames audio and subtitle stream titles based on their language, codec, and optionally channel layout and bitrate information. It ensures consistent and readable stream names across your media library.
 
-**Format:**  
-`Language 'Additional Info (if applicable)' | Codec`
+### Example
 
-For example:
-- `Deutsch | AAC`
-- `Deutsch Forced | SRT`
+![Rename Stream Titles Example](img/Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles_Example.png)
 
-### Settings:
-- **rename_audio_streams**:
-    - *Type*: Boolean
-    - *Default*: `true`
-    - *Description*: Set to `true` to rename audio streams, otherwise set to `false`.
+### Naming Format
+`Language (Addition) | Codec ChannelLayout (Bitrate)`
 
-- **rename_subtitle_streams**:
-    - *Type*: Boolean
-    - *Default*: `true`
-    - *Description*: Set to `true` to rename subtitle streams, otherwise set to `false`.
 
-### Current Limitation
-The renaming currently happens in German only, meaning that stream titles are output in the German language. This could be an issue for users who are not familiar with German, as the renamed stream titles may not be easily readable. In future updates, other languages may be supported.
+Parts in the format are only included when applicable/enabled. Examples:
 
-### Example before and after renaming
+| Stream Type | Example Title |
+|---|---|
+| Audio (all options enabled) | `English \| AC3 5.1 (448 kbps)` |
+| Audio (no channels/bitrate) | `English \| AAC` |
+| Audio (VBR codec) | `English \| Opus 5.1` |
+| Audio (with addition) | `English (Commentary) \| AAC 2.0 (192 kbps)` |
+| Subtitle | `English \| SRT` |
+| Subtitle (with addition) | `German (Forced) \| SRT` |
 
-![Example before and after renaming](./img/rename_stream_titles_example.png)
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `rename_audio_streams` | Boolean | `true` | Enable or disable renaming of audio streams. |
+| `rename_subtitle_streams` | Boolean | `true` | Enable or disable renaming of subtitle streams. |
+| `use_audio_channels` | Boolean | `true` | Append channel layout info (e.g. `2.0`, `5.1`, `7.1`) to audio stream titles. |
+| `use_audio_bitrate` | Boolean | `true` | Append bitrate info (e.g. `448 kbps`) to audio stream titles. Not shown for VBR codecs (e.g. Opus, Vorbis). |
+| `rename_language` | Dropdown | `english` | Language used for stream titles and additions. Options: `english`, `german`. |
+
+### Supported Audio Codecs
+
+AAC, AC3, DTS (incl. DTS-HD MA, DTS-HD HRA, DTS:X), E-AC3 (incl. Atmos), FLAC, MP3, Opus, PCM, TrueHD (incl. Atmos), Vorbis
+
+### Supported Subtitle Codecs
+
+ASS, HDMV PGS, SRT (SubRip), SSA, VobSub (DVD)
+
+### Supported Languages
+
+The plugin recognizes over 40 languages via ISO 639-1 (2-letter) and ISO 639-2/B & T (3-letter) codes, including but not limited to:
+
+Arabic, Basque, Bengali, Bulgarian, Catalan, Chinese, Croatian, Czech, Danish, Dutch, English, Filipino/Tagalog, Finnish, French, Galician, German, Greek, Hebrew, Hindi, Hungarian, Icelandic, Indonesian, Italian, Japanese, Korean, Latvian, Lithuanian, Malay, Norwegian, Persian, Polish, Portuguese, Romanian, Russian, Serbian, Slovak, Slovenian, Spanish, Swedish, Tamil, Thai, Turkish, Ukrainian, Vietnamese
+
+### Detected Additions
+
+The plugin parses existing stream titles and detects the following keywords (in English and German) to preserve them as additions in parentheses:
+
+| English | German |
+|---|---|
+| Commentary | Kommentar |
+| Forced | Erzwungen |
+| SDH | SDH |
+| Hearing Impaired | Hörgeschädigt |
+
+### Behavior
+
+- The plugin compares the current title with the expected title and **skips streams** that are already correctly named.
+- Only triggers a transcode (stream copy, no re-encoding) when at least one title needs to be changed.
+- VBR codecs (Opus, Vorbis) and streams with VBR-related tags will not display bitrate, even if `use_audio_bitrate` is enabled.
 
 ## Tdarr_Classic_Plugin_Chasil_Sort_Streams
 This plugin sorts streams in a media file by type (video, audio, subtitle, chapter)
