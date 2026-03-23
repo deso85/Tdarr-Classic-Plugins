@@ -7,7 +7,7 @@ const details = () => {
         Description: "Parses stream titles and sets matching disposition flags (forced, commentary, hearing/visual impaired). "
             + "Each input field accepts comma-separated regex patterns (case-insensitive). "
             + "Leave empty to use defaults.",
-        Version: "1.1",
+        Version: "1.2",
         Tags: "pre-processing",
         Inputs: [
             {
