@@ -16,7 +16,7 @@ const details = () => {
                 defaultValue: '',
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for forced disposition (comma-separated). '
-                + 'Defaults: forced, erzwungen',
+                + 'Defaults: forced, erzwungen, signs',
             },
             {
                 name: 'commentPatterns',
@@ -52,6 +52,7 @@ const DEFAULT_PATTERNS = {
     forced: [
         /forced/i,
         /erzwungen/i,
+        /\bsigns?\b/i,
     ],
     comment: [
         /comment/i,
