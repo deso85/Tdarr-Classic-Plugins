@@ -5,12 +5,13 @@ Each plugin can be used independently, but they are most effective when combined
 
 1. **Print Stream Infos** — Log stream details for debugging
 2. **Change Video Properties** — Clean up unwanted video metadata and flags
-3. **Set Disposition Flags from Stream Titles** — Automatically set disposition flags based on title patterns
-4. **Rename Stream Titles** — Standardize audio and subtitle stream titles
-5. **Sort Streams** — Order streams by type, title and language
+3. **Filter Streams By Language** — Remove audio and subtitle streams not matching a language keep-list
+4. **Set Disposition Flags from Stream Titles** — Automatically set disposition flags based on title patterns
+5. **Rename Stream Titles** — Standardize audio and subtitle stream titles
+6. **Sort Streams** — Order streams by type, title and language
 
 > **Why this order?**
-> Stream infos are printed first for a before-snapshot. Then video properties are cleaned up before disposition flags are set based on titles. Titles are renamed afterwards so flag detection still works on the original titles. Finally, streams are sorted into a clean order.
+> Stream infos are printed first for a before-snapshot. Then video properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Titles are renamed afterwards so flag detection still works on the original titles. Finally, streams are sorted into a clean order.
 
 ---
 
@@ -56,6 +57,30 @@ re-encoding) when at least one property actually needs to be changed.
 - When processing is needed, streams are copied using FFmpeg (no re-encoding).
   The `bitexact` flags are set to avoid unnecessary metadata changes.
 - The output container matches the input container (e.g. `.mkv` stays `.mkv`).
+
+## Tdarr_Classic_Plugin_Chasil_Filter_Streams_By_Language
+
+This plugin removes audio and subtitle streams whose language is not in a configurable keep-list. Video, data, attachment, and other stream types are never touched. It only triggers a transcode (stream copy, no re-encoding) when at least one stream actually needs to be removed.
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `audio_languages` | String | `eng,deu` | Comma-separated list of languages to **keep** for audio streams. Accepts ISO 639-1 (`en`, `de`) and ISO 639-2/B or /T (`eng`, `ger`, `deu`). |
+| `subtitle_languages` | String | `eng,deu` | Comma-separated list of languages to **keep** for subtitle streams. Accepts ISO 639-1 (`en`, `de`) and ISO 639-2/B or /T (`eng`, `ger`, `deu`). |
+| `keep_undefined_audio` | Boolean | `true` | Keep audio streams that have no language tag set. |
+| `keep_undefined_subtitle` | Boolean | `true` | Keep subtitle streams that have no language tag set. |
+
+### Behavior
+
+- The plugin checks each audio and subtitle stream against the configured language keep-lists.
+- Language codes are normalized internally — ISO 639-1 codes are converted to ISO 639-2/T, and ISO 639-2/B codes are mapped to their /T equivalents, so `de`, `ger`, and `deu` are all treated as the same language.
+- Streams without a language tag are kept or removed based on the `keep_undefined_audio` / `keep_undefined_subtitle` settings.
+- Video, data, attachment, and chapter streams are always kept regardless of language.
+- The plugin compares the current streams against the keep-lists and **skips processing** if no streams need to be removed.
+- When processing is needed, streams are remapped using FFmpeg stream copy (no re-encoding). The `bitexact` flags are set to avoid unnecessary metadata changes.
+- The output container matches the input container (e.g. `.mkv` stays `.mkv`).
+
 
 ## Tdarr_Classic_Plugin_Chasil_Set_Disposition_Flags_From_Stream_Titles
 This plugin parses audio and subtitle stream titles and sets matching disposition flags automatically. It detects keywords in both German and English and only re-encodes (stream copy) when flags are actually missing — leaving existing flags untouched.
