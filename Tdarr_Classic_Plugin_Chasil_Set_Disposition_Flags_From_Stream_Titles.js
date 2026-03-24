@@ -7,7 +7,7 @@ const details = () => {
         Description: "Parses stream titles and sets matching disposition flags (forced, commentary, hearing/visual impaired). "
             + "Each input field accepts comma-separated regex patterns (case-insensitive). "
             + "Leave empty to use defaults.",
-        Version: "1.2",
+        Version: "1.3",
         Tags: "pre-processing",
         Inputs: [
             {
@@ -215,7 +215,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     }
 
     response.processFile = true;
-    response.preset = `,-map 0 -c copy ${dispositionArgs.join(' ')}`;
+    response.preset = `, -fflags +bitexact -flags:v +bitexact -flags:a +bitexact -map 0 -c copy ${dispositionArgs.join(' ')}`;
 
     // Log summary and the resulting FFmpeg arguments
     response.infoLog += `=== Result: Updating ${dispositionArgs.length / 2} stream(s). ===\n`;
