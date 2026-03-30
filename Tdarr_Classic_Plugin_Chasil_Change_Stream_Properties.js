@@ -1,15 +1,15 @@
 /* eslint-disable */
 const details = () => {
     return {
-        id: "Tdarr_Classic_Plugin_Chasil_Change_Video_Properties",
+        id: "Tdarr_Classic_Plugin_Chasil_Change_Stream_Properties",
         Stage: "Pre-processing",
-        Name: "[Chasil] Change video properties if necessary",
+        Name: "[Chasil] Change stream properties if necessary",
         Type: "Video",
         Operation: "Modify",
-        Description: "The plugin removes file title, video title, video language, and video forced flag if necessary.",
-        Version: "1.1",
+        Description: "The plugin removes file title, video title, video language, video forced flag, and audio forced flag if necessary.",
+        Version: "2.0",
         Link: "",
-        Tags: "pre-processing,video,ffmpeg,configurable",
+        Tags: "pre-processing,video,audio,ffmpeg,configurable",
         Inputs: [
             {
                 name: "remove_title",
@@ -63,6 +63,19 @@ const details = () => {
                 },
                 tooltip: "Remove the video forced flag if necessary.",
             },
+            {
+                name: "remove_audio_forced_flag",
+                type: "boolean",
+                defaultValue: true,
+                inputUI: {
+                    type: 'dropdown',
+                    options: [
+                        'false',
+                        'true',
+                    ],
+                },
+                tooltip: "Remove the audio forced flag if necessary.",
+            },
         ],
     };
 };
@@ -86,8 +99,9 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     const removeVideoTitle = String(inputs.remove_video_title) === 'true';
     const removeVideoLanguage = String(inputs.remove_video_language) === 'true';
     const removeVideoForcedFlag = String(inputs.remove_video_forced_flag) === 'true';
+    const removeAudioForcedFlag = String(inputs.remove_audio_forced_flag) === 'true';
 
-    if (!removeTitle && !removeVideoTitle && !removeVideoLanguage && !removeVideoForcedFlag) {
+    if (!removeTitle && !removeVideoTitle && !removeVideoLanguage && !removeVideoForcedFlag && !removeAudioForcedFlag) {
         response.processFile = false;
         response.infoLog += "☑ All options disabled. Nothing to do.\n";
         return response;
@@ -119,7 +133,7 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         }
     }
 
-    // Collect information of video streams
+    // Process video streams
     const existingVideoStreams = file.ffProbeData.streams.filter(stream => stream.codec_type.toLowerCase() === "video");
 
     existingVideoStreams.forEach((stream, index) => {
@@ -157,6 +171,25 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
             response.infoLog += `⚠ Video stream ${index}: Error reading stream properties, skipping.\n`;
         }
     });
+
+    // Process audio streams
+    if (removeAudioForcedFlag) {
+        const existingAudioStreams = file.ffProbeData.streams.filter(stream => stream.codec_type.toLowerCase() === "audio");
+
+        existingAudioStreams.forEach((stream, index) => {
+            try {
+                if (stream.disposition && stream.disposition.forced) {
+                    response.infoLog += `☒ Audio stream ${index}: Forced flag is set. Removing forced flag.\n`;
+                    ffmpegCommandInsert += `-disposition:a:${index} -forced `;
+                    convert = true;
+                } else {
+                    response.infoLog += `☑ Audio stream ${index}: Forced flag is already unset.\n`;
+                }
+            } catch (err) {
+                response.infoLog += `⚠ Audio stream ${index}: Error reading stream properties, skipping.\n`;
+            }
+        });
+    }
 
     if (convert) {
         const ffmpegCommand = `, -fflags +bitexact -flags:v +bitexact -flags:a +bitexact ${ffmpegCommandInsert} -c copy -map 0 -max_muxing_queue_size 9999`;

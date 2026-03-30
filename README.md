@@ -4,14 +4,14 @@ Here are the custom plugins I've made for Tdarr. These plugins help with streaml
 Each plugin can be used independently, but they are most effective when combined in the right order. Below is my recommended plugin chain:
 
 1. **Print Stream Infos** — Log stream details for debugging
-2. **Change Video Properties** — Clean up unwanted video metadata and flags
+2. **Change Stream Properties** — Clean up unwanted video/audio metadata and flags
 3. **Filter Streams By Language** — Remove audio and subtitle streams not matching a language keep-list
 4. **Set Disposition Flags from Stream Titles** — Automatically set disposition flags based on title patterns
 5. **Rename Stream Titles** — Standardize audio and subtitle stream titles
 6. **Sort Streams** — Order streams by type, title and language
 
 > **Why this order?**
-> Stream infos are printed first for a before-snapshot. Then video properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Titles are renamed afterwards so flag detection still works on the original titles. Finally, streams are sorted into a clean order.
+> Stream infos are printed first for a before-snapshot. Then video and audio properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Titles are renamed afterwards so flag detection still works on the original titles. Finally, streams are sorted into a clean order.
 
 ---
 
@@ -31,12 +31,13 @@ This classic plugin prints out information about the different streams. The info
 ### Example output inside report
 ![Example output inside report](./img/print_stream_infos_example.png)
 
-## Tdarr_Classic_Plugin_Chasil_Change_Video_Properties
+## Tdarr_Classic_Plugin_Chasil_Change_Stream_Properties
 
-This plugin removes unwanted metadata and flags from video files, including the
-overall file title, video stream titles, video stream languages, and the forced
-disposition flag on video streams. It only triggers a transcode (stream copy, no
-re-encoding) when at least one property actually needs to be changed.
+This plugin removes unwanted metadata and flags from video and audio streams,
+including the overall file title, video stream titles, video stream languages,
+the forced disposition flag on video streams, and the forced disposition flag on
+audio streams. It only triggers a transcode (stream copy, no re-encoding) when
+at least one property actually needs to be changed.
 
 ### Settings
 
@@ -46,12 +47,13 @@ re-encoding) when at least one property actually needs to be changed.
 | `remove_video_title` | Boolean | `true` | Remove the title tag from video streams if set. |
 | `remove_video_language` | Boolean | `true` | Remove the language tag from video streams if set. |
 | `remove_video_forced_flag` | Boolean | `true` | Remove the forced disposition flag from video streams if set. |
+| `remove_audio_forced_flag` | Boolean | `true` | Remove the forced disposition flag from audio streams if set. |
 
 ### Behavior
 
 - The plugin checks whether the file is a video; non-video files are skipped.
 - Each option is evaluated independently — only the enabled checks are applied.
-- If all four options are set to `false`, the plugin skips processing entirely.
+- If all five options are set to `false`, the plugin skips processing entirely.
 - The plugin compares current metadata/flags against the desired state and
   **skips processing** if nothing needs to be changed.
 - When processing is needed, streams are copied using FFmpeg (no re-encoding).
@@ -80,7 +82,6 @@ This plugin removes audio and subtitle streams whose language is not in a config
 - The plugin compares the current streams against the keep-lists and **skips processing** if no streams need to be removed.
 - When processing is needed, streams are remapped using FFmpeg stream copy (no re-encoding). The `bitexact` flags are set to avoid unnecessary metadata changes.
 - The output container matches the input container (e.g. `.mkv` stays `.mkv`).
-
 
 ## Tdarr_Classic_Plugin_Chasil_Set_Disposition_Flags_From_Stream_Titles
 This plugin parses audio and subtitle stream titles and sets matching disposition flags automatically. It detects keywords in both German and English and only re-encodes (stream copy) when flags are actually missing — leaving existing flags untouched.
@@ -124,7 +125,6 @@ This plugin renames audio and subtitle stream titles based on their language, co
 
 ### Naming Format
 `Language (Addition) | Codec ChannelLayout (Bitrate)`
-
 
 Parts in the format are only included when applicable/enabled. Examples:
 
