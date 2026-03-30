@@ -87,12 +87,12 @@ This plugin removes audio and subtitle streams whose language is not in a config
 This plugin parses audio and subtitle stream titles and sets matching disposition flags automatically. It detects keywords in both German and English and only re-encodes (stream copy) when flags are actually missing — leaving existing flags untouched.
 
 ### Supported Dispositions
-| Disposition | Default Patterns (case-insensitive) |
-|---|---|
-| **forced** | `forced`, `erzwungen` |
-| **comment** | `comment`, `kommentar` |
-| **hearing_impaired** | `sdh`, `hearing.?impaired`, `hard.?of.?hearing`, `closed.?caption`, `hörgeschädigt`, `schwerhörig`, `\bcc\b` |
-| **visual_impaired** | `visual.?impaired`, `audio.?desc`, `sehgeschädigt`, `audiodeskription`, `\bad\b`, `\badp?\b` |
+| Disposition | Applicable Streams | Default Patterns (case-insensitive) |
+|---|---|---|
+| **forced** | Subtitle only | `forced`, `erzwungen`, `signs` |
+| **comment** | Audio, Subtitle | `comment`, `kommentar` |
+| **hearing_impaired** | Subtitle only | `sdh`, `hearing.?impaired`, `hard.?of.?hearing`, `closed.?caption`, `hörgeschädigt`, `schwerhörig`, `\bcc\b` |
+| **visual_impaired** | Audio only | `audio.?desc`, `visual.?impaired`, `descriptive`, `audiodeskription`, `hörfilm` |
 
 ### Settings
 Each disposition has an optional input field for additional comma-separated regex patterns. Leave empty to use the defaults listed above.
@@ -104,7 +104,7 @@ Each disposition has an optional input field for additional comma-separated rege
 
 ### How It Works
 1. Scans all audio and subtitle streams for existing titles
-2. Matches titles against the configured regex patterns
+2. Matches titles against the configured regex patterns (respecting stream type restrictions)
 3. Compares detected dispositions with the currently set flags
 4. Sets missing flags without removing any existing ones
 5. Only triggers a transcode (stream copy) if at least one flag needs to be added

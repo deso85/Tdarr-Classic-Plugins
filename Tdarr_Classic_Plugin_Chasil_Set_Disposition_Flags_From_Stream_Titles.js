@@ -6,8 +6,9 @@ const details = () => {
         Operation: "Transcode",
         Description: "Parses stream titles and sets matching disposition flags (forced, commentary, hearing/visual impaired). "
             + "Each input field accepts comma-separated regex patterns (case-insensitive). "
-            + "Leave empty to use defaults.",
-        Version: "1.3",
+            + "Leave empty to use defaults. "
+            + "Flags are only applied to applicable stream types (e.g. forced only on subtitles).",
+        Version: "1.4",
         Tags: "pre-processing",
         Inputs: [
             {
@@ -16,7 +17,8 @@ const details = () => {
                 defaultValue: '',
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for forced disposition (comma-separated). '
-                + 'Defaults: forced, erzwungen, signs',
+                    + 'Only applied to subtitle streams. '
+                    + 'Defaults: forced, erzwungen, signs',
             },
             {
                 name: 'commentPatterns',
@@ -24,7 +26,8 @@ const details = () => {
                 defaultValue: '',
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for comment disposition (comma-separated). '
-                + 'Defaults: comment, kommentar',
+                    + 'Applied to audio and subtitle streams. '
+                    + 'Defaults: comment, kommentar',
             },
             {
                 name: 'hearingImpairedPatterns',
@@ -32,8 +35,9 @@ const details = () => {
                 defaultValue: '',
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for hearing_impaired disposition (comma-separated). '
-                + 'Defaults: sdh, hearing.?impaired, hard.?of.?hearing, closed.?caption, '
-                + 'hörgeschädigt, schwerhörig, \\bcc\\b',
+                    + 'Only applied to subtitle streams. '
+                    + 'Defaults: sdh, hearing.?impaired, hard.?of.?hearing, closed.?caption, '
+                    + 'hörgeschädigt, schwerhörig, \\bcc\\b',
             },
             {
                 name: 'visualImpairedPatterns',
@@ -41,7 +45,8 @@ const details = () => {
                 defaultValue: '',
                 inputUI: { type: 'text' },
                 tooltip: 'Additional patterns for visual_impaired disposition (comma-separated). '
-                + 'Defaults: audio.?desc, visual.?impaired, descriptive, audiodeskription, hörfilm',
+                    + 'Only applied to audio streams. '
+                    + 'Defaults: audio.?desc, visual.?impaired, descriptive, audiodeskription, hörfilm',
             },
         ],
     };
@@ -84,6 +89,14 @@ const INPUT_MAP = {
     visualImpairedPatterns: 'visual_impaired',
 };
 
+// Define which stream types each disposition flag may be applied to
+const ALLOWED_STREAM_TYPES = {
+    forced: ['subtitle'],
+    comment: ['audio', 'subtitle'],
+    hearing_impaired: ['subtitle'],
+    visual_impaired: ['audio'],
+};
+
 /**
  * Merges default patterns with user-supplied patterns from inputs.
  * User patterns are provided as comma-separated regex strings.
@@ -111,11 +124,18 @@ const buildPatterns = (inputs) => {
 /**
  * Tests the given title against all pattern groups and returns
  * an object with disposition flags set to 1 (match) or 0 (no match).
+ * Only includes flags that are allowed for the given stream type.
  */
-const detectDispositions = (title, patterns) => {
+const detectDispositions = (title, patterns, codecType) => {
     const detected = {};
 
     for (const [disposition, regexes] of Object.entries(patterns)) {
+        // Skip this disposition if the stream type is not allowed for it
+        const allowedTypes = ALLOWED_STREAM_TYPES[disposition] || [];
+        if (!allowedTypes.includes(codecType)) {
+            continue;
+        }
+
         detected[disposition] = regexes.some((pattern) => pattern.test(title)) ? 1 : 0;
     }
 
@@ -142,7 +162,8 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     response.infoLog += '=== Active Patterns ===\n';
     for (const [disposition, regexes] of Object.entries(patterns)) {
         const patternStrings = regexes.map((r) => r.source).join(', ');
-        response.infoLog += `  ${disposition}: ${patternStrings}\n`;
+        const allowedTypes = (ALLOWED_STREAM_TYPES[disposition] || []).join(', ');
+        response.infoLog += `  ${disposition} [${allowedTypes}]: ${patternStrings}\n`;
     }
     response.infoLog += '\n';
 
@@ -156,19 +177,19 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         const codec = stream.codec_type || 'unknown';
         const title = (stream.tags && stream.tags.title) || '';
 
-       // Skip non-audio/subtitle streams
-       if (codec !== 'audio' && codec !== 'subtitle') {
-           response.infoLog += `  Stream ${index} (${codec}): Not applicable — skipped.\n`;
-           return;
-       }
+        // Skip non-audio/subtitle streams
+        if (codec !== 'audio' && codec !== 'subtitle') {
+            response.infoLog += `  Stream ${index} (${codec}): Not applicable — skipped.\n`;
+            return;
+        }
 
-       // Skip streams without a title and log them
+        // Skip streams without a title and log them
         if (!title) {
             response.infoLog += `  Stream ${index} (${codec}): No title — skipped.\n`;
             return;
         }
 
-        const detected = detectDispositions(title, patterns);
+        const detected = detectDispositions(title, patterns, codec);
         const activeFlags = Object.entries(detected)
             .filter(([, value]) => value === 1)
             .map(([key]) => key);
