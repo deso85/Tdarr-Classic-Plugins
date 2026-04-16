@@ -5,10 +5,11 @@ const details = () => {
         Name: "[Chasil] Ensure Stream Defaults",
         Type: "Video",
         Operation: "Transcode",
-        Description: "Ensures exactly one video and audio stream is set as default, "
-            + "and at most one subtitle stream. Applies language preferences, "
-            + "forced subtitle logic, and format priority when selecting the best candidate.",
-        Version: "1.0",
+        Description:
+            "Ensures exactly one video and audio stream is set as default, " +
+            "and at most one subtitle stream. Applies language preferences, " +
+            "forced subtitle logic, audio codec priority, and format priority when selecting the best candidate.",
+        Version: "1.1",
         Tags: "pre-processing,video,audio,subtitle,ffmpeg,configurable",
         Inputs: [
             {
@@ -16,48 +17,59 @@ const details = () => {
                 type: "string",
                 defaultValue: "ger",
                 inputUI: { type: "text" },
-                tooltip: "Preferred language for the default audio stream (ISO 639-2, e.g. ger, eng, jpn).",
-            },
-            {
-                name: "preferred_subtitle_language",
-                type: "string",
-                defaultValue: "ger",
-                inputUI: { type: "text" },
-                tooltip: "Preferred language for the default subtitle stream (ISO 639-2, e.g. ger, eng, jpn).",
+                tooltip:
+                    "Preferred audio language as a 3-letter ISO 639-2 code (e.g. ger, eng, jpn).",
             },
             {
                 name: "fallback_audio_language",
                 type: "string",
                 defaultValue: "eng",
                 inputUI: { type: "text" },
-                tooltip: "Fallback language if preferred audio is unavailable (ISO 639-2, e.g. eng).",
+                tooltip:
+                    "Fallback audio language if the preferred language is not found.",
             },
             {
-                name: "subtitle_format_priority",
+                name: "audio_codec_priority",
                 type: "string",
-                defaultValue: "ass,srt,hdmv,vobsub",
+                defaultValue: "eac3,ac3,aac,truehd,dts,flac,opus,mp3",
                 inputUI: { type: "text" },
-                tooltip: "Comma-separated subtitle format priority (best first). "
-                    + "Recognised values: ass, srt, hdmv, vobsub. "
-                    + "Formats not listed will be ranked worst. "
-                    + "Example: ass,srt,hdmv,vobsub or srt,ass,hdmv,vobsub",
+                tooltip:
+                    "Comma-separated audio codec priority (best first). " +
+                    "Codecs not listed will be ranked worst. " +
+                    "Example: eac3,ac3,aac,truehd,dts,flac,opus,mp3",
+            },
+            {
+                name: "preferred_subtitle_language",
+                type: "string",
+                defaultValue: "ger",
+                inputUI: { type: "text" },
+                tooltip:
+                    "Preferred subtitle language as a 3-letter ISO 639-2 code.",
             },
             {
                 name: "forced_sub_as_default_for_matching_audio",
                 type: "boolean",
-                defaultValue: "true",
-                inputUI: {
-                    type: "dropdown",
-                    options: ["false", "true"],
-                },
-                tooltip: "When the default audio language matches the preferred subtitle language, "
-                    + "set a forced subtitle of that language as default (if available).",
+                defaultValue: true,
+                inputUI: { type: "dropdown", options: ["true", "false"] },
+                tooltip:
+                    "If the chosen audio language matches the preferred subtitle language, " +
+                    "only set a forced subtitle as default (if one exists).",
+            },
+            {
+                name: "subtitle_format_priority",
+                type: "string",
+                defaultValue: "srt,ass,hdmv,vobsub",
+                inputUI: { type: "text" },
+                tooltip:
+                    "Comma-separated subtitle format priority (best first). " +
+                    "Codecs not listed will be ranked worst. " +
+                    "Example: srt,ass,hdmv,vobsub",
             },
         ],
     };
 };
 
-// ── Subtitle format codec mapping ──────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 // Maps user-facing format names to possible FFmpeg codec names
 const FORMAT_CODEC_MAP = {
@@ -67,109 +79,135 @@ const FORMAT_CODEC_MAP = {
     vobsub: ["dvd_subtitle", "dvdsub", "vobsub"],
 };
 
-const WORST_FORMAT_RANK = 99;
-
-/**
- * Builds a codec-to-rank mapping from a comma-separated priority string.
- * E.g. "ass,srt,hdmv,vobsub" → { subrip: 0, srt: 0, ass: 1, ssa: 1, ... }
- */
-const buildFormatPriority = (priorityString) => {
-    const result = {};
-    const formats = priorityString
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .filter((s) => s.length > 0);
-
-    formats.forEach((format, rank) => {
-        const codecs = FORMAT_CODEC_MAP[format];
-        if (codecs) {
-            codecs.forEach((codec) => {
-                result[codec] = rank;
-            });
-        }
-    });
-
-    return result;
-};
+const WORST_FORMAT_RANK = 9999;
 
 // ── Helper functions ───────────────────────────────────────────────────────────
 
-/**
- * Returns the ISO 639-2 language tag of a stream, normalised to lowercase.
- */
 const getLanguage = (stream) => {
-    return ((stream.tags && stream.tags.language) || "und").toLowerCase();
+    return (
+        (stream.tags && (stream.tags.language || "").toLowerCase()) || "und"
+    );
 };
 
-/**
- * Returns true if the stream has a specific disposition flag set.
- */
-const hasDisposition = (stream, flag) => {
-    return stream.disposition && stream.disposition[flag] === 1;
+const hasDisposition = (stream, key) => {
+    return (
+        stream.disposition &&
+        (stream.disposition[key] === 1 || stream.disposition[key] === true)
+    );
 };
 
-/**
- * Returns the format priority rank for a subtitle stream.
- */
+const getSubtitleType = (stream) => {
+    if (hasDisposition(stream, "forced")) return "forced";
+    if (hasDisposition(stream, "hearing_impaired")) return "sdh";
+    const title = (
+        (stream.tags && (stream.tags.title || "")) ||
+        ""
+    ).toLowerCase();
+    if (title.includes("forced") || title.includes("zwang")) return "forced";
+    if (title.includes("sdh") || title.includes("hearing")) return "sdh";
+    return "normal";
+};
+
+const buildFormatPriority = (csvString) => {
+    const map = {};
+    csvString
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((fmt, idx) => {
+            const codecs = FORMAT_CODEC_MAP[fmt] || [fmt];
+            codecs.forEach((c) => {
+                map[c] = idx;
+            });
+        });
+    return map;
+};
+
 const getFormatRank = (stream, priorityMap) => {
     const codec = (stream.codec_name || "").toLowerCase();
     return (codec in priorityMap) ? priorityMap[codec] : WORST_FORMAT_RANK;
 };
 
-/**
- * Classifies a subtitle stream as 'forced', 'commentary', 'sdh', or 'normal'.
- */
-const getSubtitleType = (stream) => {
-    if (hasDisposition(stream, "forced")) return "forced";
-    if (hasDisposition(stream, "comment")) return "commentary";
-    if (hasDisposition(stream, "hearing_impaired")) return "sdh";
-    return "normal";
-};
-
-/**
- * From an array of subtitle streams picks the best one according to format priority.
- * Returns the stream object or null.
- */
-const pickBestFormat = (streams, priorityMap) => {
-    if (streams.length === 0) return null;
-    return streams.reduce((best, current) => {
-        return getFormatRank(current, priorityMap) < getFormatRank(best, priorityMap)
-            ? current
-            : best;
-    });
-};
-
-/**
- * Collects all disposition flags currently set on a stream as an array of strings.
- */
-const collectFlags = (stream) => {
-    if (!stream.disposition) return [];
-    return Object.entries(stream.disposition)
-        .filter(([, v]) => v === 1)
-        .map(([k]) => k);
-};
-
-/**
- * Builds a disposition string for FFmpeg.
- * Takes the existing flags on a stream and ensures 'default' is added or removed.
- */
-const buildDispositionString = (stream, shouldBeDefault) => {
-    const existing = collectFlags(stream);
-    const withoutDefault = existing.filter((f) => f !== "default");
-
-    if (shouldBeDefault) {
-        withoutDefault.push("default");
+const pickBestFormat = (candidates, priorityMap) => {
+    if (candidates.length === 0) return null;
+    let best = candidates[0];
+    let bestRank = getFormatRank(best, priorityMap);
+    for (let i = 1; i < candidates.length; i++) {
+        const rank = getFormatRank(candidates[i], priorityMap);
+        if (rank < bestRank) {
+            best = candidates[i];
+            bestRank = rank;
+        }
     }
+    return best;
+};
 
-    return withoutDefault.length > 0 ? withoutDefault.join("+") : "0";
+const buildAudioCodecPriority = (csvString) => {
+    const map = {};
+    csvString
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((codec, idx) => {
+            map[codec] = idx;
+        });
+    return map;
+};
+
+const getAudioCodecRank = (stream, priorityMap) => {
+    const codec = (stream.codec_name || "").toLowerCase();
+    if (codec in priorityMap) return priorityMap[codec];
+    for (const key of Object.keys(priorityMap)) {
+        if (codec.includes(key) || key.includes(codec)) return priorityMap[key];
+    }
+    return WORST_FORMAT_RANK;
+};
+
+const pickBestAudioCodec = (candidates, priorityMap) => {
+    if (candidates.length === 0) return null;
+    let best = candidates[0];
+    let bestRank = getAudioCodecRank(best, priorityMap);
+    for (let i = 1; i < candidates.length; i++) {
+        const rank = getAudioCodecRank(candidates[i], priorityMap);
+        if (rank < bestRank) {
+            best = candidates[i];
+            bestRank = rank;
+        }
+    }
+    return best;
+};
+
+const buildDispositionString = (stream, shouldBeDefault) => {
+    const keys = [
+        "default",
+        "dub",
+        "original",
+        "comment",
+        "lyrics",
+        "karaoke",
+        "forced",
+        "hearing_impaired",
+        "visual_impaired",
+        "clean_effects",
+        "attached_pic",
+        "timed_thumbnails",
+    ];
+    const parts = [];
+    keys.forEach((key) => {
+        const val =
+            key === "default"
+                ? shouldBeDefault
+                : stream.disposition &&
+                  (stream.disposition[key] === 1 ||
+                      stream.disposition[key] === true);
+        parts.push((val ? "+" : "-") + key);
+    });
+    return parts.join("");
 };
 
 // ── Main plugin ────────────────────────────────────────────────────────────────
 
 const plugin = (file, librarySettings, inputs, otherArguments) => {
-    const lib = require("../methods/lib")();
-    inputs = lib.loadDefaultValues(inputs, details);
-
     const response = {
         processFile: false,
         preset: "",
@@ -180,29 +218,59 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         infoLog: "",
     };
 
-    const prefAudioLang = (inputs.preferred_audio_language || "ger").trim().toLowerCase();
-    const prefSubLang = (inputs.preferred_subtitle_language || "ger").trim().toLowerCase();
-    const fallbackAudioLang = (inputs.fallback_audio_language || "eng").trim().toLowerCase();
-    const forcedSubForMatch = String(inputs.forced_sub_as_default_for_matching_audio) === "true";
-    const formatPriority = buildFormatPriority(inputs.subtitle_format_priority || "srt,ass,hdmv,vobsub");
+    if (!file.ffProbeData || !file.ffProbeData.streams) {
+        response.infoLog += "⚠ No stream data found. Skipping.\n";
+        return response;
+    }
+
+    const streams = file.ffProbeData.streams;
+
+    const videoStreams = streams.filter((s) => s.codec_type === "video");
+    const audioStreams = streams.filter((s) => s.codec_type === "audio");
+    const subtitleStreams = streams.filter((s) => s.codec_type === "subtitle");
+
+    const prefAudioLang = (inputs.preferred_audio_language || "ger")
+        .trim()
+        .toLowerCase();
+    const prefSubLang = (inputs.preferred_subtitle_language || "ger")
+        .trim()
+        .toLowerCase();
+    const fallbackAudioLang = (inputs.fallback_audio_language || "eng")
+        .trim()
+        .toLowerCase();
+    const forcedSubForMatch =
+        String(inputs.forced_sub_as_default_for_matching_audio) === "true";
+    const formatPriority = buildFormatPriority(
+        inputs.subtitle_format_priority || "srt,ass,hdmv,vobsub"
+    );
+    const audioCodecPriority = buildAudioCodecPriority(
+        inputs.audio_codec_priority || "truehd,dts,flac,eac3,ac3,aac,opus,mp3"
+    );
 
     // ── Categorise streams ─────────────────────────────────────────────────────
-
-    const allStreams = file.ffProbeData.streams;
-    const videoStreams = allStreams.filter((s) => (s.codec_type || "").toLowerCase() === "video");
-    const audioStreams = allStreams.filter((s) => (s.codec_type || "").toLowerCase() === "audio");
-    const subtitleStreams = allStreams.filter((s) => (s.codec_type || "").toLowerCase() === "subtitle");
-
     response.infoLog += "=== Settings ===\n";
     response.infoLog += `  Preferred audio language    : ${prefAudioLang}\n`;
     response.infoLog += `  Preferred subtitle language : ${prefSubLang}\n`;
     response.infoLog += `  Fallback audio language     : ${fallbackAudioLang}\n`;
     response.infoLog += `  Forced sub for matching     : ${forcedSubForMatch}\n`;
-    response.infoLog += `  Subtitle format priority    : ${inputs.subtitle_format_priority}\n`;
+    response.infoLog += `  Audio codec priority        : ${inputs.audio_codec_priority || "truehd,dts,flac,eac3,ac3,aac,opus,mp3"}\n`;
+    response.infoLog += `  Subtitle format priority    : ${inputs.subtitle_format_priority || "srt,ass,hdmv,vobsub"}\n`;
     response.infoLog += "\n";
 
+    // ── Stream overview ────────────────────────────────────────────────────────
+
     response.infoLog += "=== Stream Overview ===\n";
-    response.infoLog += `  Video: ${videoStreams.length}  |  Audio: ${audioStreams.length}  |  Subtitle: ${subtitleStreams.length}\n\n`;
+    streams.forEach((s) => {
+        const lang = getLanguage(s);
+        const codec = s.codec_name || "unknown";
+        const def = hasDisposition(s, "default") ? "DEFAULT" : "";
+        const forced = hasDisposition(s, "forced") ? "FORCED" : "";
+        const hi = hasDisposition(s, "hearing_impaired") ? "SDH" : "";
+        const title = (s.tags && s.tags.title) || "";
+        const flags = [def, forced, hi].filter(Boolean).join(", ");
+        response.infoLog += `  [${s.index}] ${s.codec_type} | ${codec} | ${lang} | ${title} ${flags ? "(" + flags + ")" : ""}\n`;
+    });
+    response.infoLog += "\n";
 
     // ── 1. Video default ───────────────────────────────────────────────────────
 
@@ -211,17 +279,15 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     let chosenVideoDefault = null;
 
     if (videoStreams.length > 0) {
-        const currentDefaults = videoStreams.filter((s) => hasDisposition(s, "default"));
-
-        if (currentDefaults.length === 1) {
-            chosenVideoDefault = currentDefaults[0];
-            response.infoLog += `  ☑ Stream ${chosenVideoDefault.index}: Already the only default.\n`;
-        } else if (currentDefaults.length > 1) {
-            chosenVideoDefault = currentDefaults[0];
-            response.infoLog += `  ☒ Multiple defaults found (${currentDefaults.length}). Keeping stream ${chosenVideoDefault.index} only.\n`;
+        const currentVideoDefaults = videoStreams.filter((s) =>
+            hasDisposition(s, "default")
+        );
+        if (currentVideoDefaults.length === 1) {
+            chosenVideoDefault = currentVideoDefaults[0];
+            response.infoLog += `  ☑ Exactly one video default (stream ${chosenVideoDefault.index}). No change.\n`;
         } else {
             chosenVideoDefault = videoStreams[0];
-            response.infoLog += `  ☒ No default set. Setting stream ${chosenVideoDefault.index}.\n`;
+            response.infoLog += `  ☒ ${currentVideoDefaults.length} video defaults found. Setting stream ${chosenVideoDefault.index} as default.\n`;
         }
     } else {
         response.infoLog += "  ⚠ No video streams found.\n";
@@ -234,40 +300,43 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     response.infoLog += "=== Audio Default ===\n";
 
     let chosenAudioDefault = null;
+    let defaultAudioLang = null;
 
     if (audioStreams.length > 0) {
+        const currentAudioDefaults = audioStreams.filter((s) =>
+            hasDisposition(s, "default")
+        );
         const prefAudioCandidates = audioStreams.filter(
             (s) => getLanguage(s) === prefAudioLang
-                && !hasDisposition(s, "comment")
-                && !hasDisposition(s, "visual_impaired")
         );
-
         const fallbackAudioCandidates = audioStreams.filter(
             (s) => getLanguage(s) === fallbackAudioLang
-                && !hasDisposition(s, "comment")
-                && !hasDisposition(s, "visual_impaired")
         );
 
-        const currentAudioDefaults = audioStreams.filter((s) => hasDisposition(s, "default"));
-
         if (prefAudioCandidates.length > 0) {
-            chosenAudioDefault = prefAudioCandidates[0];
-            response.infoLog += `  ☒ Preferred language '${prefAudioLang}' found. Setting stream ${chosenAudioDefault.index} as default.\n`;
+            chosenAudioDefault = pickBestAudioCodec(
+                prefAudioCandidates,
+                audioCodecPriority
+            );
+            response.infoLog += `  ☒ Preferred language '${prefAudioLang}' found. Best codec '${chosenAudioDefault.codec_name}'. Setting stream ${chosenAudioDefault.index} as default.\n`;
         } else if (fallbackAudioCandidates.length > 0) {
-            chosenAudioDefault = fallbackAudioCandidates[0];
-            response.infoLog += `  ☒ Preferred '${prefAudioLang}' not found. Fallback '${fallbackAudioLang}' found. Setting stream ${chosenAudioDefault.index}.\n`;
+            chosenAudioDefault = pickBestAudioCodec(
+                fallbackAudioCandidates,
+                audioCodecPriority
+            );
+            response.infoLog += `  ☒ Preferred '${prefAudioLang}' not found. Fallback '${fallbackAudioLang}' found. Best codec '${chosenAudioDefault.codec_name}'. Setting stream ${chosenAudioDefault.index} as default.\n`;
         } else if (currentAudioDefaults.length === 1) {
             chosenAudioDefault = currentAudioDefaults[0];
             response.infoLog += `  ☑ Neither preferred nor fallback found. Keeping existing default stream ${chosenAudioDefault.index}.\n`;
         } else {
             chosenAudioDefault = audioStreams[0];
-            response.infoLog += `  ☒ No suitable language found. Setting first audio stream ${chosenAudioDefault.index}.\n`;
+            response.infoLog += `  ☒ No suitable language found. Setting first audio stream ${chosenAudioDefault.index} as default.\n`;
         }
+
+        defaultAudioLang = getLanguage(chosenAudioDefault);
     } else {
         response.infoLog += "  ⚠ No audio streams found.\n";
     }
-
-    const defaultAudioLang = chosenAudioDefault ? getLanguage(chosenAudioDefault) : null;
 
     response.infoLog += "\n";
 
@@ -280,12 +349,19 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     if (subtitleStreams.length > 0 && defaultAudioLang) {
         const audioMatchesSub = defaultAudioLang === prefSubLang;
 
-        const subsOfPrefLang = subtitleStreams.filter((s) => getLanguage(s) === prefSubLang);
-        const subsOfAudioLang = subtitleStreams.filter((s) => getLanguage(s) === defaultAudioLang);
+        const subsOfPrefLang = subtitleStreams.filter(
+            (s) => getLanguage(s) === prefSubLang
+        );
+        const subsOfAudioLang = subtitleStreams.filter(
+            (s) => getLanguage(s) === defaultAudioLang
+        );
 
-        const normalSubs = (arr) => arr.filter((s) => getSubtitleType(s) === "normal");
-        const sdhSubs = (arr) => arr.filter((s) => getSubtitleType(s) === "sdh");
-        const forcedSubs = (arr) => arr.filter((s) => getSubtitleType(s) === "forced");
+        const normalSubs = (arr) =>
+            arr.filter((s) => getSubtitleType(s) === "normal");
+        const sdhSubs = (arr) =>
+            arr.filter((s) => getSubtitleType(s) === "sdh");
+        const forcedSubs = (arr) =>
+            arr.filter((s) => getSubtitleType(s) === "forced");
 
         if (audioMatchesSub) {
             response.infoLog += `  Audio language matches subtitle language (${prefSubLang}).\n`;
@@ -305,9 +381,18 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         } else {
             response.infoLog += `  Audio (${defaultAudioLang}) differs from preferred subtitle (${prefSubLang}).\n`;
 
-            const bestNormal = pickBestFormat(normalSubs(subsOfPrefLang), formatPriority);
-            const bestSdh = pickBestFormat(sdhSubs(subsOfPrefLang), formatPriority);
-            const bestForcedAudio = pickBestFormat(forcedSubs(subsOfAudioLang), formatPriority);
+            const bestNormal = pickBestFormat(
+                normalSubs(subsOfPrefLang),
+                formatPriority
+            );
+            const bestSdh = pickBestFormat(
+                sdhSubs(subsOfPrefLang),
+                formatPriority
+            );
+            const bestForcedAudio = pickBestFormat(
+                forcedSubs(subsOfAudioLang),
+                formatPriority
+            );
 
             if (bestNormal) {
                 chosenSubDefault = bestNormal;
@@ -340,7 +425,8 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
     const processGroup = (streams, chosen, label) => {
         streams.forEach((stream) => {
             const isDefault = hasDisposition(stream, "default");
-            const shouldBeDefault = chosen !== null && stream.index === chosen.index;
+            const shouldBeDefault =
+                chosen !== null && stream.index === chosen.index;
 
             if (isDefault === shouldBeDefault) {
                 const lang = getLanguage(stream);
