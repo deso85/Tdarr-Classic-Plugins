@@ -7,11 +7,12 @@ Each plugin can be used independently, but they are most effective when combined
 2. **Change Stream Properties** — Clean up unwanted video/audio metadata and flags
 3. **Filter Streams By Language** — Remove audio and subtitle streams not matching a language keep-list
 4. **Set Disposition Flags from Stream Titles** — Automatically set disposition flags based on title patterns
-5. **Rename Stream Titles** — Standardize audio and subtitle stream titles
-6. **Sort Streams** — Order streams by type, title and language
+5. **Add Compatible Audio Stream** — Add fallback audio streams (e.g. EAC3) for devices without premium codec support
+6. **Rename Stream Titles** — Standardize audio and subtitle stream titles
+7. **Sort Streams** — Order streams by type, title and language
 
 > **Why this order?**
-> Stream infos are printed first for a before-snapshot. Then video and audio properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Titles are renamed afterwards so flag detection still works on the original titles. Finally, streams are sorted into a clean order.
+> Stream infos are printed first for a before-snapshot. Then video and audio properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Compatible fallback audio streams are added next, while the original streams and their flags are still intact — this way the plugin can correctly identify which languages already have a compatible stream and which premium streams to use as a source. Titles are renamed afterwards so flag detection in step 4 still works on the original titles, and the new fallback streams also get proper titles. Finally, streams are sorted into a clean order.
 
 ---
 
@@ -30,6 +31,8 @@ This classic plugin prints out information about the different streams. The info
 
 ### Example output inside report
 ![Example output inside report](./img/print_stream_infos_example.png)
+
+---
 
 ## Tdarr_Classic_Plugin_Chasil_Change_Stream_Properties
 
@@ -60,6 +63,8 @@ at least one property actually needs to be changed.
   The `bitexact` flags are set to avoid unnecessary metadata changes.
 - The output container matches the input container (e.g. `.mkv` stays `.mkv`).
 
+---
+
 ## Tdarr_Classic_Plugin_Chasil_Filter_Streams_By_Language
 
 This plugin removes audio and subtitle streams whose language is not in a configurable keep-list. Video, data, attachment, and other stream types are never touched. It only triggers a transcode (stream copy, no re-encoding) when at least one stream actually needs to be removed.
@@ -82,6 +87,9 @@ This plugin removes audio and subtitle streams whose language is not in a config
 - The plugin compares the current streams against the keep-lists and **skips processing** if no streams need to be removed.
 - When processing is needed, streams are remapped using FFmpeg stream copy (no re-encoding). The `bitexact` flags are set to avoid unnecessary metadata changes.
 - The output container matches the input container (e.g. `.mkv` stays `.mkv`).
+
+
+---
 
 ## Tdarr_Classic_Plugin_Chasil_Set_Disposition_Flags_From_Stream_Titles
 This plugin parses audio and subtitle stream titles and sets matching disposition flags automatically. It detects keywords in both German and English and only re-encodes (stream copy) when flags are actually missing — leaving existing flags untouched.
@@ -114,6 +122,49 @@ The plugin provides detailed log output visible in the Tdarr file report:
 - Active patterns per disposition
 - Per-stream breakdown (skipped, no match, already set, or newly added flags)
 - The resulting FFmpeg arguments for full transparency
+
+---
+
+## Tdarr_Classic_Plugin_Chasil_Add_Compatible_Audio_Stream
+
+This plugin checks each language's audio streams for device-compatible codecs (AAC, AC3, EAC3) and adds a fallback transcode when only premium codecs (e.g. TrueHD, DTS-HD MA, Atmos) are present.
+This is useful for devices that lack licenses for premium audio formats and would otherwise force the server to transcode on the fly.
+Original streams are always preserved.
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `target_codec` | Dropdown | `eac3` | Target codec for the fallback stream. Options: `aac`, `ac3`, `eac3`. |
+| `bitrate_per_channel` | String | `96` | Bitrate in kbps per audio channel. The total bitrate is calculated as `channels × bitrate_per_channel` (e.g. 6 channels × 96 = 576 kbps). |
+
+### How It Works
+
+- **Groups audio streams by language** and classifies each as either compatible (AAC, AC3, EAC3) or premium (everything else, e.g. TrueHD, DTS-HD MA, FLAC, Opus).
+- **Skips streams** with commentary or visual impairment disposition flags — these are not considered for fallback generation.
+- For each language that has only premium streams, the plugin selects the best source (highest channel count) and transcodes it to the configured target codec.
+- **Channel count is preserved** where possible — capped at the codec's maximum (AAC: 8ch, AC3: 6ch, EAC3: 8ch). If the source exceeds the codec limit, it is downmixed accordingly.
+- The new stream inherits the source stream's language and disposition flags (except `default`), and receives a descriptive title (e.g. `EAC3_5.1_fallback`).
+- All existing streams are kept untouched via stream copy.
+
+### Behavior
+
+- The plugin checks whether the file is a video; non-video files are skipped.
+- Languages where a compatible stream already exists are skipped entirely.
+- Languages with no audio streams at all (neither compatible nor premium) are skipped.
+- The plugin **skips processing** if all languages already have at least one compatible stream.
+- When processing is needed, existing streams are copied and new fallback streams are appended using FFmpeg. Only the new streams are transcoded.
+- The output container matches the input container (e.g. `.mkv` stays `.mkv`).
+
+### Logging
+
+The plugin provides detailed log output visible in the Tdarr file report:
+
+- Per-language breakdown showing which compatible or premium streams were found
+- Which streams are selected as transcode source and what the target format will be
+- Downmix notes when the source channel count exceeds the codec maximum
+
+---
 
 ## Tdarr_Classic_Plugin_Chasil_Rename_Stream_Titles
 
@@ -177,6 +228,8 @@ The plugin parses existing stream titles and detects the following keywords (in 
 - The plugin compares the current title with the expected title and **skips streams** that are already correctly named.
 - Only triggers a transcode (stream copy, no re-encoding) when at least one title needs to be changed.
 - VBR codecs (Opus, Vorbis) and streams with VBR-related tags will not display bitrate, even if `use_audio_bitrate` is enabled.
+
+---
 
 ## Tdarr_Classic_Plugin_Chasil_Sort_Streams
 This plugin sorts streams in a media file by type (video, audio, subtitle, chapter)
