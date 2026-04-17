@@ -285,10 +285,9 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         metadataArgs.push('-metadata:s:' + outIdx + ' title=' + title);
 
         // Copy disposition flags from source, except 'default'
-        const dispo = streams[tc.sourceIndex].disposition || {};
-        const flags = Object.entries(dispo)
-            .filter(([key, val]) => val === 1 && key !== 'default')
-            .map(([key]) => key)
+        var srcDispo = streams[tc.sourceIndex].disposition || {};
+        var flags = Object.keys(srcDispo)
+            .filter(function (key) { return srcDispo[key] === 1 && key !== 'default'; })
             .join('+');
         metadataArgs.push('-disposition:' + outIdx + ' ' + (flags || '0'));
 
