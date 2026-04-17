@@ -10,9 +10,16 @@ Each plugin can be used independently, but they are most effective when combined
 5. **Add Compatible Audio Stream** — Add fallback audio streams (e.g. EAC3) for devices without premium codec support
 6. **Rename Stream Titles** — Standardize audio and subtitle stream titles
 7. **Sort Streams** — Order streams by type, title and language
+8. **Ensure Stream Defaults** — Set the default disposition flag for audio and subtitle streams based on language and codec/format priority
 
 > **Why this order?**
-> Stream infos are printed first for a before-snapshot. Then video and audio properties are cleaned up. Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams. Disposition flags are then set based on titles. Compatible fallback audio streams are added next, while the original streams and their flags are still intact — this way the plugin can correctly identify which languages already have a compatible stream and which premium streams to use as a source. Titles are renamed afterwards so flag detection in step 4 still works on the original titles, and the new fallback streams also get proper titles. Finally, streams are sorted into a clean order.
+> Stream infos are printed first for a before-snapshot. Then video and audio properties are cleaned up.
+> Next, unwanted audio and subtitle streams are removed by language so that subsequent plugins only process relevant streams.
+> Disposition flags are then set based on titles.
+> Compatible fallback audio streams are added next, while the original streams and their flags are still intact — this way the plugin can correctly identify which languages already have a compatible stream and which premium streams to use as a source.
+> Titles are renamed afterwards so flag detection in step 4 still works on the original titles, and the new fallback streams also get proper titles.
+> Streams are then sorted into a clean order.
+> Finally, default streams are selected based on language preference and codec/format priority — running last ensures all streams have their final titles, flags, and order before defaults are assigned.
 
 ---
 
@@ -37,57 +44,11 @@ This classic plugin prints out information about the different streams. The info
 ## Tdarr_Classic_Plugin_Chasil_Change_Stream_Properties
 
 This plugin removes unwanted metadata and flags from video and audio streams,
-including the overall file title, video stream titles, video stream languages,
-the forced disposition flag on video streams, and the forced disposition flag on
-audio streams. It only triggers a transcode (stream copy, no re-encoding) when
-at least one property actually needs to be changed.
-
-### Settings
-
-| Setting | Type | Default | Description |
-|---|---|---|---|
-| `remove_title` | Boolean | `true` | Remove the overall file metadata title if it is set. |
-| `remove_video_title` | Boolean | `true` | Remove the title tag from video streams if set. |
-| `remove_video_language` | Boolean | `true` | Remove the language tag from video streams if set. |
-| `remove_video_forced_flag` | Boolean | `true` | Remove the forced disposition flag from video streams if set. |
-| `remove_audio_forced_flag` | Boolean | `true` | Remove the forced disposition flag from audio streams if set. |
-
-### Behavior
-
-- The plugin checks whether the file is a video; non-video files are skipped.
-- Each option is evaluated independently — only the enabled checks are applied.
-- If all five options are set to `false`, the plugin skips processing entirely.
-- The plugin compares current metadata/flags against the desired state and
-  **skips processing** if nothing needs to be changed.
-- When processing is needed, streams are copied using FFmpeg (no re-encoding).
-  The `bitexact` flags are set to avoid unnecessary metadata changes.
-- The output container matches the input container (e.g. `.mkv` stays `.mkv`).
-
----
-
-## Tdarr_Classic_Plugin_Chasil_Filter_Streams_By_Language
-
-This plugin removes audio and subtitle streams whose language is not in a configurable keep-list. Video, data, attachment, and other stream types are never touched. It only triggers a transcode (stream copy, no re-encoding) when at least one stream actually needs to be removed.
-
-### Settings
-
-| Setting | Type | Default | Description |
-|---|---|---|---|
-| `audio_languages` | String | `eng,deu` | Comma-separated list of languages to **keep** for audio streams. Accepts ISO 639-1 (`en`, `de`) and ISO 639-2/B or /T (`eng`, `ger`, `deu`). |
-| `subtitle_languages` | String | `eng,deu` | Comma-separated list of languages to **keep** for subtitle streams. Accepts ISO 639-1 (`en`, `de`) and ISO 639-2/B or /T (`eng`, `ger`, `deu`). |
-| `keep_undefined_audio` | Boolean | `true` | Keep audio streams that have no language tag set. |
-| `keep_undefined_subtitle` | Boolean | `true` | Keep subtitle streams that have no language tag set. |
-
-### Behavior
-
-- The plugin checks each audio and subtitle stream against the configured language keep-lists.
-- Language codes are normalized internally — ISO 639-1 codes are converted to ISO 639-2/T, and ISO 639-2/B codes are mapped to their /T equivalents, so `de`, `ger`, and `deu` are all treated as the same language.
-- Streams without a language tag are kept or removed based on the `keep_undefined_audio` / `keep_undefined_subtitle` settings.
+includin[...]treams without a language tag are kept or removed based on the `keep_undefined_audio` / `keep_undefined_subtitle` settings.
 - Video, data, attachment, and chapter streams are always kept regardless of language.
 - The plugin compares the current streams against the keep-lists and **skips processing** if no streams need to be removed.
 - When processing is needed, streams are remapped using FFmpeg stream copy (no re-encoding). The `bitexact` flags are set to avoid unnecessary metadata changes.
 - The output container matches the input container (e.g. `.mkv` stays `.mkv`).
-
 
 ---
 
@@ -254,6 +215,41 @@ order, improving accessibility and compatibility.
 ### Usage
 This plugin requires no configuration. Simply add it to your library or flow
 to ensure streams are ordered logically.
+
+---
+
+## Tdarr_Classic_Plugin_Chasil_Ensure_Stream_Defaults
+
+This plugin ensures that exactly one video and one audio stream are set as default, and at most one subtitle stream. It selects the best candidates based on configurable language preferences, audio codec priority, subtitle format priority, and forced subtitle logic.
+
+### Settings
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `preferred_audio_language` | String | `ger` | Preferred language for the default audio stream (ISO 639-2/B or 639-1 code). |
+| `fallback_audio_language` | String | `eng` | Fallback language if the preferred audio language is not found. |
+| `preferred_subtitle_language` | String | `ger` | Preferred language for the default subtitle stream. |
+| `audio_codec_priority` | String | `truehd,dts,flac,eac3,ac3,aac,opus,mp3` | Comma-separated codec priority list for audio stream selection. Higher priority codecs are preferred when multiple streams match the same language. |
+| `subtitle_format_priority` | String | `srt,ass,hdmv,vobsub` | Comma-separated format priority list for subtitle stream selection. |
+| `forced_sub_as_default_for_matching_audio` | Boolean | `true` | When enabled, if the selected default audio stream matches the preferred subtitle language, a forced subtitle in that language is preferred as default (if available). |
+
+### How It Works
+
+1. **Video**: Ensures exactly one video stream has the `default` flag. If none or multiple are set, the first video stream is selected.
+2. **Audio**: Selects the best audio stream based on language preference (preferred → fallback → any), then codec priority. Streams with `comment` or `visual_impaired` disposition are excluded from selection.
+3. **Subtitle**: Selects the best subtitle stream based on language preference and format priority. Streams with `comment` or `hearing_impaired` disposition are excluded. When `forced_sub_as_default_for_matching_audio` is enabled and the default audio language matches the preferred subtitle language, a forced subtitle in that language is preferred.
+4. Only modifies disposition flags — no re-encoding. Uses FFmpeg stream copy with `bitexact` flags.
+5. **Skips processing** if all default flags are already set correctly.
+
+### Logging
+
+The plugin provides detailed log output visible in the Tdarr file report:
+
+- Current settings overview
+- Stream overview with language, codec, and current disposition flags
+- Audio and subtitle candidate evaluation with scoring details
+- Clear indication of which streams are selected as default and why
+- The resulting FFmpeg arguments for full transparency
 
 ---
 
