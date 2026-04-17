@@ -6,7 +6,7 @@ const details = () => {
         Name: "[Chasil] Add compatible audio fallback stream per language",
         Operation: "Transcode",
         Description: "[Contains built-in filter] For each language found in the file, checks if a compatible audio stream (AAC, AC3 or EAC3) exists. If only 'premium' codecs (TrueHD, DTS-HD MA, DTS:X, DTS, etc.) are present, a fallback stream is created in the configured codec while preserving the original channel layout (capped by codec limits). Original streams are never removed.",
-        Version: "1.0",
+        Version: "1.1",
         Link: "",
         Tags: "pre-processing,audio,ffmpeg,configurable",
         Inputs: [
@@ -169,6 +169,13 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         const s = streams[i];
         if (s.codec_type !== 'audio') continue;
 
+        // Skip audio descriptions and commentary tracks
+        const dispo = s.disposition || {};
+        if (dispo.visual_impaired === 1 || dispo.comment === 1) {
+            response.infoLog += '[Stream #' + i + '] Skipping (visual_impaired or comment).\n';
+            continue;
+        }
+
         const lang = (s.tags && s.tags.language) ? s.tags.language.toLowerCase().trim() : 'und';
         const codec = (s.codec_name || '').toLowerCase().trim();
         const channels = s.channels || 2;
@@ -265,7 +272,13 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
         const title = targetCodec.toUpperCase() + '_' + tc.layoutLabel + '_fallback';
         metadataArgs.push('-metadata:s:' + outIdx + ' title=' + title);
 
-        metadataArgs.push('-disposition:' + outIdx + ' 0');
+        // Copy disposition flags from source, except 'default'
+        const dispo = streams[tc.sourceIndex].disposition || {};
+        const flags = Object.entries(dispo)
+            .filter(([key, val]) => val === 1 && key !== 'default')
+            .map(([key]) => key)
+            .join('+');
+        metadataArgs.push('-disposition:' + outIdx + ' ' + (flags || '0'));
 
         outIdx++;
     }
