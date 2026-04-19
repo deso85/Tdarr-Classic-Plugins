@@ -3,30 +3,31 @@ const details = () => {
     return {
         id: "Tdarr_Classic_Plugin_Chasil_Add_Compatible_Audio_Stream",
         Stage: "Pre-processing",
-        Name: "[Chasil] Add compatible audio fallback stream per language (exclude attachments except fonts, fonts mapped last)",
+        Name: "[Chasil] Add compatible audio fallback stream per language",
         Operation: "Transcode",
         Description:
-            "[Contains built-in filter] For each language found in the file, checks if a compatible audio stream (AAC, AC3 or EAC3) exists. " +
-            "If only 'premium' codecs (TrueHD, DTS-HD MA, DTS:X, DTS, etc.) are present, a fallback stream is created in the configured codec while " +
-            "preserving the original channel layout (capped by codec limits). Original streams are never removed. " +
-            "Attachments are excluded except font attachments (ttf/otf). Font attachments are mapped LAST to avoid Matroska mux errors.",
-        Version: "1.3",
+            "[Contains built-in filter] Ensures at least one compatible audio stream (AAC/AC3/EAC3) per language. " +
+            "If only premium codecs are present, a fallback stream is created while preserving channel layout " +
+            "(capped by codec limits). Original streams are never removed. " +
+            "All existing attachments are always preserved; fonts are mapped LAST to avoid Matroska mux errors. " +
+            "Attachment policy must be enforced by a separate plugin.",
+        Version: "1.4",
         Link: "",
-        Tags: "pre-processing,audio,ffmpeg,configurable,attachments",
+        Tags: "pre-processing,audio,ffmpeg,attachments",
         Inputs: [
             {
                 name: "target_codec",
-                type: 'string',
-                defaultValue: 'eac3',
+                type: "string",
+                defaultValue: "eac3",
                 inputUI: {
-                    type: 'dropdown',
-                    options: ['eac3', 'ac3', 'aac'],
+                    type: "dropdown",
+                    options: ["eac3", "ac3", "aac"],
                 },
-                tooltip: 'Target codec for the fallback audio stream.\n'
-                    + 'EAC3 supports up to 5.1 (native ffmpeg encoder limitation).\n'
-                    + 'AC3 is limited to 5.1 max.\n'
-                    + 'AAC works everywhere but surround support varies by player.\n'
-                    + '(default: eac3)',
+                tooltip: "Target codec for the fallback audio stream.\n" +
+                    "EAC3 supports up to 5.1.\n" +
+                    "AC3 supports up to 5.1.\n" +
+                    "AAC supports up to 7.1.\n" +
+                    "(default: eac3)",
             },
             {
                 name: "bitrate_mono",
@@ -82,285 +83,170 @@ const details = () => {
     };
 };
 
-const plugin = (file, librarySettings, inputs, otherArguments) => {
-    const lib = require('../methods/lib')();
+const plugin = (file, librarySettings, inputs) => {
+    const lib = require("../methods/lib")();
     inputs = lib.loadDefaultValues(inputs, details);
 
     const response = {
         processFile: false,
-        preset: '',
-        container: '',
+        preset: "",
+        container: "",
         handBrakeMode: false,
         FFmpegMode: true,
         reQueueAfter: false,
-        infoLog: '',
+        infoLog: "",
     };
 
-    // ──────────────────────────────────────────────
-    // Parse inputs
-    // ──────────────────────────────────────────────
-    const targetCodec = (inputs.target_codec || 'eac3').toLowerCase().trim();
+    const targetCodec = inputs.target_codec.toLowerCase().trim();
     const bitrateMono = parseInt(inputs.bitrate_mono, 10) || 128;
     const bitrateStereo = parseInt(inputs.bitrate_stereo, 10) || 256;
     const bitrate51 = parseInt(inputs.bitrate_5_1, 10) || 640;
     const bitrate71 = parseInt(inputs.bitrate_7_1, 10) || 768;
     const bitratePerChannel = parseInt(inputs.bitrate_per_channel, 10) || 96;
-    const premiumCodecs = (inputs.premium_codecs || '')
-        .split(',')
-        .map(function (c) { return c.trim().toLowerCase(); })
+
+    const premiumCodecs = inputs.premium_codecs
+        .split(",")
+        .map(c => c.trim().toLowerCase())
         .filter(Boolean);
 
-    const compatibleCodecs = ['aac', 'ac3', 'eac3'];
+    const compatibleCodecs = ["aac", "ac3", "eac3"];
 
-    // Native ffmpeg encoder channel limits
-    // EAC3 native encoder: max 5.1 (6 channels)
-    // AC3 native encoder:  max 5.1 (6 channels)
-    // AAC native encoder:  up to 7.1 (8 channels)
     const codecMaxChannels = {
         eac3: 6,
         ac3: 6,
         aac: 8,
     };
-    var codecMaxCh = codecMaxChannels[targetCodec] || 6;
 
-    // ──────────────────────────────────────────────
-    // Channel layout helpers
-    // ──────────────────────────────────────────────
-    var channelLayoutLabels = {
-        1: '1.0',
-        2: '2.0',
-        3: '2.1',
-        4: '4.0',
-        5: '5.0',
-        6: '5.1',
-        7: '6.1',
-        8: '7.1',
+    const channelLabel = {
+        1: "1.0",
+        2: "2.0",
+        6: "5.1",
+        8: "7.1",
     };
 
-    function getLayoutLabel(channels) {
-        return channelLayoutLabels[channels] || (channels + 'ch');
+    function bitrateFor(ch) {
+        if (ch === 1) return bitrateMono;
+        if (ch === 2) return bitrateStereo;
+        if (ch === 6) return bitrate51;
+        if (ch === 8) return bitrate71;
+        return ch * bitratePerChannel;
     }
 
-    function getBitrate(channels) {
-        switch (channels) {
-            case 1: return bitrateMono;
-            case 2: return bitrateStereo;
-            case 6: return bitrate51;
-            case 8: return bitrate71;
-            default: return channels * bitratePerChannel;
-        }
-    }
-
-    // ──────────────────────────────────────────────
-    // Attachment filtering helpers (keep fonts only)
-    // ──────────────────────────────────────────────
     function isFontAttachment(s) {
-        if (!s) return false;
-        if (s.codec_type !== 'attachment') return false;
+        if (s.codec_type !== "attachment") return false;
+        const name = ((s.tags && s.tags.filename) || "").toLowerCase();
+        const mime = ((s.tags && s.tags.mimetype) || "").toLowerCase();
 
-        var codec = (s.codec_name || '').toLowerCase().trim();
-        var tags = s.tags || {};
-        var filename = (tags.filename || '').toLowerCase().trim();
-        var mimetype = (tags.mimetype || '').toLowerCase().trim();
-
-        // Common indicators for font attachments
-        if (codec === 'ttf' || codec === 'otf') return true;
-        if (filename.endsWith('.ttf') || filename.endsWith('.otf')) return true;
-
-        // Mimetype variants
-        if (mimetype.includes('font')) return true;
-        if (mimetype.includes('truetype')) return true;
-        if (mimetype.includes('opentype')) return true;
-
-        return false;
+        return (
+            name.endsWith(".ttf") ||
+            name.endsWith(".otf") ||
+            name.endsWith(".ttc") ||
+            name.endsWith(".woff") ||
+            name.endsWith(".woff2") ||
+            mime.includes("font")
+        );
     }
 
-    // ──────────────────────────────────────────────
-    // 1. Discover all languages from audio streams
-    // ──────────────────────────────────────────────
-    var streams = (file.ffProbeData && file.ffProbeData.streams) ? file.ffProbeData.streams : [];
-    var audioStreams = streams.filter(function (s) { return s.codec_type === 'audio'; });
+    const streams = file.ffProbeData?.streams || [];
+    const audioStreams = streams.filter(s => s.codec_type === "audio");
 
     if (audioStreams.length === 0) {
-        response.infoLog += "☒ No audio streams found. Skipping.\n";
+        response.infoLog += "☒ No audio streams found.\n";
         return response;
     }
 
-    // Build per-language info dynamically from what's in the file
-    var langMap = {};
+    const langMap = {};
 
-    for (var i = 0; i < streams.length; i++) {
-        var s = streams[i];
-        if (s.codec_type !== 'audio') continue;
+    streams.forEach((s, i) => {
+        if (s.codec_type !== "audio") return;
 
-        // Skip audio descriptions and commentary tracks
-        var dispo = s.disposition || {};
-        if (dispo.visual_impaired === 1 || dispo.comment === 1) {
-            response.infoLog += '[Stream #' + i + '] Skipping (visual_impaired or comment).\n';
-            continue;
-        }
+        const dispo = s.disposition || {};
+        if (dispo.comment || dispo.visual_impaired) return;
 
-        var lang = (s.tags && s.tags.language) ? s.tags.language.toLowerCase().trim() : 'und';
-        var codec = (s.codec_name || '').toLowerCase().trim();
-        var channels = s.channels || 2;
+        const lang = (s.tags?.language || "und").toLowerCase();
+        const codec = (s.codec_name || "").toLowerCase();
+        const ch = s.channels || 2;
 
-        if (!langMap[lang]) {
-            langMap[lang] = { compatible: [], premium: [] };
-        }
+        langMap[lang] = langMap[lang] || { compatible: [], premium: [] };
 
-        var entry = { index: i, codec: codec, channels: channels };
+        const entry = { index: i, codec, channels: ch };
 
-        if (compatibleCodecs.includes(codec)) {
-            langMap[lang].compatible.push(entry);
-        } else if (premiumCodecs.includes(codec)) {
-            langMap[lang].premium.push(entry);
-        }
-    }
+        if (compatibleCodecs.includes(codec)) langMap[lang].compatible.push(entry);
+        else if (premiumCodecs.includes(codec)) langMap[lang].premium.push(entry);
+    });
 
-    // ──────────────────────────────────────────────
-    // 2. Determine which languages need a fallback
-    // ──────────────────────────────────────────────
-    var transcodesNeeded = [];
+    const transcodes = [];
 
-    var langKeys = Object.keys(langMap);
-    for (var li = 0; li < langKeys.length; li++) {
-        var lang2 = langKeys[li];
-        var info = langMap[lang2];
+    Object.keys(langMap).forEach(lang => {
+        const info = langMap[lang];
+        if (info.compatible.length) return;
+        if (!info.premium.length) return;
 
-        if (info.compatible.length > 0) {
-            response.infoLog += '[' + lang2 + '] Already has compatible stream(s): '
-                + info.compatible.map(function (s2) { return s2.codec + ' ' + s2.channels + 'ch'; }).join(', ') + '\n';
-            continue;
-        }
+        const best = info.premium.reduce((a, b) =>
+            b.channels > a.channels ? b : a
+        );
 
-        if (info.premium.length === 0) {
-            response.infoLog += '[' + lang2 + '] No premium or compatible audio streams. Skipping.\n';
-            continue;
-        }
+        const maxCh = codecMaxChannels[targetCodec] || 6;
+        const targetCh = Math.min(best.channels, maxCh);
 
-        // Pick the best premium stream (highest channel count, first wins on tie)
-        var best = info.premium.reduce(function (a, b) { return b.channels > a.channels ? b : a; });
-
-        // Target channels: source capped by codec max
-        var targetChannels = Math.min(best.channels, codecMaxCh);
-        var targetBitrate = getBitrate(targetChannels);
-        var layoutLabel = getLayoutLabel(targetChannels);
-
-        var downmixNote = '';
-        if (best.channels > codecMaxCh) {
-            downmixNote = ' (downmix from ' + getLayoutLabel(best.channels) + ')';
-        }
-
-        response.infoLog += '[' + lang2 + '] No compatible stream found. Will transcode stream #' + best.index
-            + ' (' + best.codec + ', ' + best.channels + 'ch) -> ' + targetCodec + ' ' + layoutLabel
-            + ' @ ' + targetBitrate + 'kbps' + downmixNote + '\n';
-
-        transcodesNeeded.push({
-            sourceIndex: best.index,
-            sourceChannels: best.channels,
-            sourceCodec: best.codec,
-            lang: lang2,
-            targetChannels: targetChannels,
-            targetBitrate: targetBitrate,
-            layoutLabel: layoutLabel,
+        transcodes.push({
+            source: best.index,
+            channels: targetCh,
+            bitrate: bitrateFor(targetCh),
+            lang,
+            label: channelLabel[targetCh] || `${targetCh}ch`,
         });
-    }
+    });
 
-    // ──────────────────────────────────────────────
-    // 3. Nothing to do?
-    // ──────────────────────────────────────────────
-    if (transcodesNeeded.length === 0) {
-        response.infoLog += "☑ All languages already have a compatible audio stream. Nothing to do.\n";
+    if (!transcodes.length) {
+        response.infoLog += "☑ All languages already have compatible audio.\n";
         return response;
     }
 
-    // ──────────────────────────────────────────────
-    // 4. Build ffmpeg command
-    // Key rule: map font attachments LAST to avoid Matroska mux errors.
-    // ──────────────────────────────────────────────
-    var mapArgs = [];
-    var codecArgs = [];
-    var metadataArgs = [];
+    const mapArgs = [];
+    const codecArgs = ["-c copy"];
+    const metaArgs = [];
 
-    var keptFontAttachmentIndexes = [];
-    var excludedAttachmentIndexes = [];
+    const fontAttachments = [];
+    const otherAttachments = [];
 
-    // 4a) Map ALL non-attachment streams first (video/audio/subtitles/etc.)
-    for (var mi = 0; mi < streams.length; mi++) {
-        var st = streams[mi];
-        if (st && st.codec_type === 'attachment') {
-            if (isFontAttachment(st)) {
-                keptFontAttachmentIndexes.push(mi);
-            } else {
-                excludedAttachmentIndexes.push(mi);
-            }
-            continue; // do not map attachments here
+    streams.forEach((s, i) => {
+        if (s.codec_type === "attachment") {
+            (isFontAttachment(s) ? fontAttachments : otherAttachments).push(i);
+        } else {
+            mapArgs.push(`-map 0:${i}`);
         }
-        mapArgs.push('-map 0:' + mi);
-    }
+    });
 
-    // Logging for attachment handling
-    for (var ei = 0; ei < excludedAttachmentIndexes.length; ei++) {
-        response.infoLog += '[Stream #' + excludedAttachmentIndexes[ei] + '] Excluding attachment (non-font).\n';
-    }
+    let outIdx = mapArgs.length;
 
-    codecArgs.push('-c copy');
-
-    // 4b) Add new transcoded streams next (time-based streams must come before attachments)
-    // outIdx must be the next OUTPUT stream index; start from count of already mapped streams
-    var outIdx = mapArgs.length;
-
-    for (var ti = 0; ti < transcodesNeeded.length; ti++) {
-        var tc = transcodesNeeded[ti];
-
-        // Map the source audio stream again to create the new encoded track
-        mapArgs.push('-map 0:' + tc.sourceIndex);
-
-        codecArgs.push('-c:' + outIdx + ' ' + targetCodec);
-        codecArgs.push('-b:' + outIdx + ' ' + tc.targetBitrate + 'k');
-        codecArgs.push('-ac:' + outIdx + ' ' + tc.targetChannels);
-
-        metadataArgs.push('-metadata:s:' + outIdx + ' language=' + tc.lang);
-
-        // Title without spaces or special characters to avoid CLI parsing issues
-        var title = targetCodec.toUpperCase() + '_' + tc.layoutLabel + '_fallback';
-        metadataArgs.push('-metadata:s:' + outIdx + ' title=' + title);
-
-        // Copy disposition flags from source, except 'default'
-        var srcDispo = (streams[tc.sourceIndex] && streams[tc.sourceIndex].disposition) ? streams[tc.sourceIndex].disposition : {};
-        var flags = Object.keys(srcDispo)
-            .filter(function (key) { return srcDispo[key] === 1 && key !== 'default'; })
-            .join('+');
-        metadataArgs.push('-disposition:' + outIdx + ' ' + (flags || '0'));
-
+    transcodes.forEach(tc => {
+        mapArgs.push(`-map 0:${tc.source}`);
+        codecArgs.push(`-c:${outIdx} ${targetCodec}`);
+        codecArgs.push(`-b:${outIdx} ${tc.bitrate}k`);
+        codecArgs.push(`-ac:${outIdx} ${tc.channels}`);
+        metaArgs.push(`-metadata:s:${outIdx} language=${tc.lang}`);
+        metaArgs.push(`-metadata:s:${outIdx} title=${targetCodec.toUpperCase()}_${tc.label}_fallback`);
+        metaArgs.push(`-disposition:${outIdx} 0`);
         outIdx++;
-    }
+    });
 
-    // 4c) Map kept font attachments LAST
-    for (var fi = 0; fi < keptFontAttachmentIndexes.length; fi++) {
-        var fIdx = keptFontAttachmentIndexes[fi];
-        mapArgs.push('-map 0:' + fIdx);
-
-        var t = (streams[fIdx] && streams[fIdx].tags) ? streams[fIdx].tags : {};
-        response.infoLog += '[Stream #' + fIdx + '] Keeping font attachment (mapped last): ' + (t.filename || 'unknown') + '\n';
-    }
-
-    var allArgs = [
-        mapArgs.join(' '),
-        codecArgs.join(' '),
-        metadataArgs.join(' '),
-        '-max_muxing_queue_size 9999',
-    ].join(' ');
-
-    var ffmpegCommand = ', ' + allArgs;
+    otherAttachments.forEach(i => mapArgs.push(`-map 0:${i}`));
+    fontAttachments.forEach(i => mapArgs.push(`-map 0:${i}`));
 
     response.processFile = true;
-    response.preset = ffmpegCommand;
-    response.container = '.' + file.container;
-    response.handBrakeMode = false;
-    response.FFmpegMode = true;
+    response.preset =
+        ", " +
+        [
+            mapArgs.join(" "),
+            codecArgs.join(" "),
+            metaArgs.join(" "),
+            "-max_muxing_queue_size 9999",
+        ].join(" ");
+
+    response.container = "." + file.container;
     response.reQueueAfter = true;
-    response.infoLog += '☒ Adding ' + transcodesNeeded.length + ' fallback audio stream(s).\n';
+    response.infoLog += `☒ Added ${transcodes.length} fallback audio stream(s). Attachments preserved.\n`;
 
     return response;
 };
